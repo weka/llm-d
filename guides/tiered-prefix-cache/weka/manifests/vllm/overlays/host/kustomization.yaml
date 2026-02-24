@@ -73,3 +73,21 @@ patches:
           name: ib-uverbs
           mountPath: /dev/infiniband
 
+  # Use IfNotPresent for init containers (images pinned by sha tag)
+  - target:
+      kind: Deployment
+      name: decode
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/initContainers/0/imagePullPolicy
+        value: IfNotPresent
+      - op: replace
+        path: /spec/template/spec/initContainers/1/imagePullPolicy
+        value: IfNotPresent
+  - target:
+      kind: Deployment
+      name: prefill
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/initContainers/0/imagePullPolicy
+        value: IfNotPresent
