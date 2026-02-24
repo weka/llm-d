@@ -1,0 +1,18 @@
+ARG BASE_IMAGE=quay.io/weka.io/llm-d:v0.5.0-latest-bef6991-dc515f3f
+
+FROM ${BASE_IMAGE}
+
+USER root
+
+# Patch vLLM in-place: cherry-pick PR #33292 (pure Python, no recompilation)
+# vLLM is editable-installed at /opt/vllm-source in the base image
+COPY --from=vllm-local vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py \
+     /opt/vllm-source/vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py
+
+# Copy GDS scripts for Weka
+COPY docker/scripts/cuda/runtime/enable-nvidia-gds.sh /usr/local/bin/enable-nvidia-gds.sh
+COPY docker/scripts/cuda/runtime/gds-startup-probe.sh /usr/local/bin/gds-startup-probe.sh
+RUN chmod +x /usr/local/bin/enable-nvidia-gds.sh \
+    /usr/local/bin/gds-startup-probe.sh
+
+USER 2000
