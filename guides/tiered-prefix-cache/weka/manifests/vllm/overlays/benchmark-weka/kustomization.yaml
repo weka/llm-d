@@ -1,0 +1,104 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: weka
+
+resources:
+  - serviceAccount.yaml
+  - ../aggregated
+
+patches:
+  # Patch weka-storage volume to use hostPath (same as host overlay)
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/volumes/1
+        value:
+          name: weka-storage
+          hostPath:
+            path: /mnt/weka
+            type: Directory
+
+  # Add hostNetwork for RDMA access
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/template/spec/hostNetwork
+        value: true
+
+  # Add privileged security context for unlimited memlock (RDMA memory pinning)
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/securityContext
+        value:
+          privileged: true
+          capabilities:
+            add:
+              - IPC_LOCK
+              - SYS_RESOURCE
+
+  # Add RDMA device volumes
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value:
+          name: ib-rdma-cm
+          hostPath:
+            path: /dev/infiniband/rdma_cm
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value:
+          name: ib-uverbs
+          hostPath:
+            path: /dev/infiniband
+
+  # Add RDMA device mounts to vllm container
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value:
+          name: ib-rdma-cm
+          mountPath: /dev/infiniband/rdma_cm
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value:
+          name: ib-uverbs
+          mountPath: /dev/infiniband
+
+  # Use IfNotPresent for init containers (images pinned by digest tag)
+  - target:
+      kind: Deployment
+      name: vllm-engine
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/initContainers/0/imagePullPolicy
+        value: IfNotPresent
+      - op: replace
+        path: /spec/template/spec/initContainers/1/imagePullPolicy
+        value: IfNotPresent
+
+  # Weka GDS backend: LMCACHE_LOCAL_CPU=false (explicit, already default from base)
+  - target:
+      kind: Deployment
+      name: vllm-engine
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: vllm-engine
+      spec:
+        template:
+          spec:
+            containers:
+            - name: vllm
+              env:
+              - name: LMCACHE_LOCAL_CPU
+                value: false
