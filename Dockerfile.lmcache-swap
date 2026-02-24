@@ -1,0 +1,41 @@
+ARG BASE_IMAGE=ghcr.io/llm-d/llm-d-cuda:v0.5.0
+
+# Stage 1: Build LMCache wheel
+FROM ${BASE_IMAGE} AS lmcache-builder
+
+USER root
+
+ENV LIBRARY_PATH="/usr/local/cuda/lib64/stubs:${LIBRARY_PATH:-}"
+
+ARG LMCACHE_REPO=https://github.com/oferki/LMCache.git
+ARG LMCACHE_REF=weka_gds
+
+RUN git clone -b ${LMCACHE_REF} ${LMCACHE_REPO} /tmp/lmcache && \
+    cd /tmp/lmcache && \
+    . /opt/vllm/bin/activate && \
+    uv build --wheel --no-build-isolation --out-dir /tmp/wheels && \
+    rm -rf /tmp/lmcache
+
+# Stage 2: Final image
+FROM ${BASE_IMAGE}
+
+USER root
+
+# Patch vLLM in-place: cherry-pick PR #33292 (pure Python, no recompilation)
+# vLLM is editable-installed at /opt/vllm-source in the base image
+COPY --from=vllm-local vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py \
+     /opt/vllm-source/vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py
+
+# Install custom LMCache wheel
+COPY --from=lmcache-builder /tmp/wheels/ /tmp/wheels/
+RUN . /opt/vllm/bin/activate && \
+    uv pip install --force-reinstall --no-deps /tmp/wheels/*.whl && \
+    rm -rf /tmp/wheels
+
+# Copy GDS scripts for Weka
+COPY docker/scripts/cuda/runtime/enable-nvidia-gds.sh /usr/local/bin/enable-nvidia-gds.sh
+COPY docker/scripts/cuda/runtime/gds-startup-probe.sh /usr/local/bin/gds-startup-probe.sh
+RUN chmod +x /usr/local/bin/enable-nvidia-gds.sh \
+    /usr/local/bin/gds-startup-probe.sh
+
+USER 2000
