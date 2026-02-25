@@ -20,6 +20,16 @@ patches:
           hostPath:
             path: /mnt/weka
             type: Directory
+  # Use Recreate strategy (delete old pods before creating new ones)
+  # GPU pods can't coexist on same node during rolling updates
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/strategy
+        value:
+          type: Recreate
+
   # Add hostNetwork for RDMA access without device plugin
   - target:
       kind: Deployment

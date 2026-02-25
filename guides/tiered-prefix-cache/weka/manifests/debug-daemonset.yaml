@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: debug
+  namespace: weka
+spec:
+  selector:
+    matchLabels:
+      app: debug
+  template:
+    metadata:
+      labels:
+        app: debug
+    spec:
+      hostNetwork: true
+      hostPID: true
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: debug
+          image: ghcr.io/llm-d/llm-d-cuda-dev-ubuntu:sha-8c00fce
+          command: ["sleep", "infinity"]
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: dev-infiniband
+              mountPath: /dev/infiniband
+      volumes:
+        - name: dev-infiniband
+          hostPath:
+            path: /dev/infiniband

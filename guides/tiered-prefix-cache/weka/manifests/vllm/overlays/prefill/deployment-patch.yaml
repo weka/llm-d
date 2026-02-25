@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: llm-d-model-server
 spec:
-  replicas: 4
+  replicas: 5
   selector:
     matchLabels:
       llm-d.ai/role: prefill
