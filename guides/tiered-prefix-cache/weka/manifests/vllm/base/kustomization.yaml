@@ -43,7 +43,7 @@ patches:
           - "--disable-log-requests"
           - "--disable-uvicorn-access-log"
           - "--max-model-len"
-          - "32000"
+          - "125000"
 
   # Remove HF_TOKEN from base recipe (not needed for WEKA deployment)
   - target:

@@ -60,7 +60,7 @@ spec:
         - --disable-log-requests
         - --disable-uvicorn-access-log
         - --max-model-len
-        - '32000'
+        - '125000'
         - --enable-auto-tool-choice
         - --tool-call-parser
         - llama3_json
@@ -82,11 +82,11 @@ spec:
         resources:
           limits:
             cpu: '16'
-            memory: 64Gi
+            memory: 256Gi
             nvidia.com/gpu: '4'
           requests:
             cpu: '16'
-            memory: 64Gi
+            memory: 256Gi
             nvidia.com/gpu: '4'
         startupProbe:
           httpGet:
