@@ -103,7 +103,7 @@ patches:
       - op: add
         path: /spec/template/spec/containers/0/env/-
         value:
-          name: LMCACHE_WEKA_PATH
+          name: LMCACHE_GDS_PATH
           value: /mnt/weka/cache
       - op: add
         path: /spec/template/spec/containers/0/env/-
