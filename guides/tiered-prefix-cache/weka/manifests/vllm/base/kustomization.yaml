@@ -130,6 +130,11 @@ patches:
         value:
           name: PYTHONHASHSEED
           value: "0"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: UCX_NET_DEVICES
+          value: "mlx5_0:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_7:1,mlx5_8:1,mlx5_9:1"
 
   # Update resources for WEKA deployment
   - target:
