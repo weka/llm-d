@@ -1,0 +1,136 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: weka
+
+resources:
+  - ../../base
+  - serviceAccount.yaml
+
+patches:
+  # Apply strategic merge patch for aggregated configuration
+  # Sets replicas, role labels, args with LMCacheConnectorV1, resources, probes
+  # and the create-cufile init container (no routing-proxy sidecar)
+  - path: deployment-patch.yaml
+
+  # Remove VLLM_NIXL_SIDE_CHANNEL_HOST env var (not needed for aggregated mode)
+  # This is index 0 in the env list added by base (after HF_TOKEN removal)
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/containers/0/env/0
+
+  # Set port for aggregated: 8000 (vLLM API)
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/ports
+        value:
+          - containerPort: 8000
+            name: http
+            protocol: TCP
+
+  # Patch weka-storage volume to use hostPath
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/volumes/1
+        value:
+          name: weka-storage
+          hostPath:
+            path: /mnt/weka
+            type: Directory
+
+  # Use Recreate strategy (delete old pods before creating new ones)
+  # GPU pods can't coexist on the same node during rolling updates
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: add
+        path: /spec/strategy
+        value:
+          type: Recreate
+
+  # Add hostNetwork for RDMA access without device plugin
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: add
+        path: /spec/template/spec/hostNetwork
+        value: true
+
+  # Add privileged security context for unlimited memlock (RDMA memory pinning)
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/securityContext
+        value:
+          privileged: true
+          capabilities:
+            add:
+              - IPC_LOCK
+              - SYS_RESOURCE
+
+  # Add RDMA device volumes
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value:
+          name: ib-rdma-cm
+          hostPath:
+            path: /dev/infiniband/rdma_cm
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value:
+          name: ib-uverbs
+          hostPath:
+            path: /dev/infiniband
+
+  # Add RDMA device mounts to vllm container
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value:
+          name: ib-rdma-cm
+          mountPath: /dev/infiniband/rdma_cm
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value:
+          name: ib-uverbs
+          mountPath: /dev/infiniband
+
+  # Use IfNotPresent for init container (image pinned by sha tag)
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/initContainers/0/imagePullPolicy
+        value: IfNotPresent
+
+  # Add imagePullSecrets for private registry access
+  # TODO: This is temporary - will be removed when image becomes public
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: add
+        path: /spec/template/spec/imagePullSecrets
+        value:
+          - name: ghcr-secret
