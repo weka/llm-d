@@ -6,7 +6,7 @@ USER root
 
 # Patch vLLM in-place: cherry-pick PR #33292 (pure Python, no recompilation)
 # vLLM is editable-installed at /opt/vllm-source in the base image
-COPY --from=vllm-local vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py \
+COPY docker/patches/vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py \
      /opt/vllm-source/vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py
 
 # Copy GDS scripts for Weka
