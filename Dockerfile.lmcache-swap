@@ -7,10 +7,11 @@ USER root
 
 ENV LIBRARY_PATH="/usr/local/cuda/lib64/stubs:${LIBRARY_PATH:-}"
 
-ARG LMCACHE_REPO=https://github.com/oferki/LMCache.git
-ARG LMCACHE_REF=weka_gds
+ARG LMCACHE_REPO=https://github.com/weka/LMCache.git
+ARG LMCACHE_REF=5d8d3164ecaf5acc6d720230343951d511ce70dd
 
-RUN git clone -b ${LMCACHE_REF} ${LMCACHE_REPO} /tmp/lmcache && \
+RUN git clone ${LMCACHE_REPO} /tmp/lmcache && \
+    git -C /tmp/lmcache checkout ${LMCACHE_REF} && \
     cd /tmp/lmcache && \
     . /opt/vllm/bin/activate && \
     uv build --wheel --no-build-isolation --out-dir /tmp/wheels && \
@@ -23,7 +24,7 @@ USER root
 
 # Patch vLLM in-place: cherry-pick PR #33292 (pure Python, no recompilation)
 # vLLM is editable-installed at /opt/vllm-source in the base image
-COPY --from=vllm-local vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py \
+COPY docker/patches/vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py \
      /opt/vllm-source/vllm/distributed/kv_transfer/kv_connector/v1/multi_connector.py
 
 # Install custom LMCache wheel
