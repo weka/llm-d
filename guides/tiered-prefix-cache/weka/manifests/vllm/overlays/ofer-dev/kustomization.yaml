@@ -3,7 +3,7 @@ kind: Kustomization
 namespace: weka-ofer
 
 resources:
-  - ../aggreated-weka
+  - ../aggregated-weka
   - lmcache-config.yaml
 
 patches:
