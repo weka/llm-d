@@ -2,6 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../../../../../recipes/vllm/standard
+  - lmcache-config.yaml
 
 labels:
   - pairs:
@@ -90,36 +91,6 @@ patches:
         value:
           name: NVIDIA_GDS
           value: "enabled"
-      - op: add
-        path: /spec/template/spec/containers/0/env/-
-        value:
-          name: LMCACHE_USE_EXPERIMENTAL
-          value: "true"
-      - op: add
-        path: /spec/template/spec/containers/0/env/-
-        value:
-          name: LMCACHE_CHUNK_SIZE
-          value: "256"
-      - op: add
-        path: /spec/template/spec/containers/0/env/-
-        value:
-          name: LMCACHE_GDS_PATH
-          value: /mnt/weka/cache
-      - op: add
-        path: /spec/template/spec/containers/0/env/-
-        value:
-          name: LMCACHE_CUFILE_BUFFER_SIZE
-          value: "8192"
-      - op: add
-        path: /spec/template/spec/containers/0/env/-
-        value:
-          name: LMCACHE_LOCAL_CPU
-          value: "false"
-      - op: add
-        path: /spec/template/spec/containers/0/env/-
-        value:
-          name: LMCACHE_EXTRA_CONFIG
-          value: '{"gds_io_threads": 16}'
       - op: add
         path: /spec/template/spec/containers/0/env/-
         value:
@@ -340,3 +311,26 @@ patches:
         value:
           name: lmcache-prometheus
           mountPath: /tmp/lmcache_prometheus
+
+  # Mount LMCache config file
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value:
+          name: lmcache-config
+          configMap:
+            name: lmcache-config
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value:
+          name: lmcache-config
+          mountPath: /etc/lmcache
+          readOnly: true
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: LMCACHE_CONFIG_FILE
+          value: "/etc/lmcache/config.yaml"

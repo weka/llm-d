@@ -3,7 +3,7 @@ kind: Kustomization
 namespace: weka-ofer
 
 resources:
-  - ../pvc
+  - ../aggreated-weka
   - lmcache-config.yaml
 
 patches:
@@ -14,56 +14,3 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/image
         value: "quay.io/weka.io/llm-d:fix-patches-1"
-
-  # Strip individual LMCACHE_* env vars — config file takes precedence via LMCACHE_CONFIG_FILE
-  - target:
-      kind: Deployment
-      name: llm-d-model-server
-    patch: |-
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: llm-d-model-server
-      spec:
-        template:
-          spec:
-            containers:
-              - name: vllm
-                env:
-                  - name: LMCACHE_USE_EXPERIMENTAL
-                    $patch: delete
-                  - name: LMCACHE_CHUNK_SIZE
-                    $patch: delete
-                  - name: LMCACHE_GDS_PATH
-                    $patch: delete
-                  - name: LMCACHE_CUFILE_BUFFER_SIZE
-                    $patch: delete
-                  - name: LMCACHE_LOCAL_CPU
-                    $patch: delete
-                  - name: LMCACHE_EXTRA_CONFIG
-                    $patch: delete
-                  - name: LMCACHE_ENABLE_KV_EVENTS
-                    $patch: delete
-
-  # Mount LMCache config file
-  - target:
-      kind: Deployment
-      name: llm-d-model-server
-    patch: |-
-      - op: add
-        path: /spec/template/spec/volumes/-
-        value:
-          name: lmcache-config
-          configMap:
-            name: lmcache-config
-      - op: add
-        path: /spec/template/spec/containers/0/volumeMounts/-
-        value:
-          name: lmcache-config
-          mountPath: /etc/lmcache
-          readOnly: true
-      - op: add
-        path: /spec/template/spec/containers/0/env/-
-        value:
-          name: LMCACHE_CONFIG_FILE
-          value: "/etc/lmcache/config.yaml"
