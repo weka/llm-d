@@ -41,6 +41,44 @@ inferenceExtension:
           weight: 1.0
         - pluginRef: max-score-picker
 
+    # For aggregated LMCache serving (precise-prefix-cache-scorer), use this config instead.
+    # Set pluginsConfigFile: "precise-prefix-cache-config.yaml" to activate.
+    # hashSeed must match PYTHONHASHSEED set on vLLM pods (0 in this deployment).
+    precise-prefix-cache-config.yaml: |
+      apiVersion: inference.networking.x-k8s.io/v1alpha1
+      kind: EndpointPickerConfig
+      plugins:
+      - type: single-profile-handler
+      - type: precise-prefix-cache-scorer
+        parameters:
+          tokenProcessorConfig:
+            blockSize: 64
+            hashSeed: '0'
+          indexerConfig:
+            tokenizersPoolConfig:
+              modelName: RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic
+              hf:
+                tokenizersCacheDir: /tmp/tokenizers
+          kvEventsConfig:
+            topicFilter: kv@
+            concurrency: 4
+            discoverPods: true
+            podDiscoveryConfig:
+              socketPort: 5557
+      - type: kv-cache-utilization-scorer
+      - type: queue-scorer
+      - type: max-score-picker
+      schedulingProfiles:
+      - name: default
+        plugins:
+        - pluginRef: precise-prefix-cache-scorer
+          weight: 3.0
+        - pluginRef: kv-cache-utilization-scorer
+          weight: 2.0
+        - pluginRef: queue-scorer
+          weight: 2.0
+        - pluginRef: max-score-picker
+
 inferencePool:
   targetPortNumber: 8000
   modelServerType: vllm
