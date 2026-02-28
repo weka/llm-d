@@ -1,0 +1,15 @@
+# KV-aware routing: add POD_IP env var so the ZMQ topic in --kv-events-config
+# substitutes the real pod IP, and LMCACHE_ENABLE_KV_EVENTS so KV blocks are
+# visible to the precise-prefix-cache-scorer in the EPP.
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: POD_IP
+    valueFrom:
+      fieldRef:
+        fieldPath: status.podIP
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: LMCACHE_ENABLE_KV_EVENTS
+    value: "true"

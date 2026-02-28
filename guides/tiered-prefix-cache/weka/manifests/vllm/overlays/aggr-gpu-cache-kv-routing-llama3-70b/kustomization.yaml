@@ -1,0 +1,74 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Aggregated mode (no P/D), GPU-only KV cache (no LMCache), KV-aware routing via EPP.
+# Composes: aggregated-weka base + gateway + KV-aware-routing mixin + inferencepool helm chart.
+
+resources:
+  - ../aggregated-weka
+  - ../../../gateway/overlays/istio
+
+helmCharts:
+  - name: inferencepool
+    repo: oci://registry.k8s.io/gateway-api-inference-extension/charts
+    version: v1.3.0
+    releaseName: weka-vllm
+    valuesFile: ../mixin-kv-aware-routing/inferencepool.values.yaml
+
+patches:
+  # Override args: remove --kv-transfer-config (no LMCache connector)
+  - path: deployment-patch.yaml
+
+  # KV-aware routing env vars from mixin (POD_IP + LMCACHE_ENABLE_KV_EVENTS)
+  - path: ../mixin-kv-aware-routing/deployment-kv-events-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Remove LMCache env vars (not needed for GPU-only KV cache).
+  # After aggregated-weka processing, indices are:
+  #   5=LMCACHE_USE_EXPERIMENTAL, 6=LMCACHE_CHUNK_SIZE,
+  #   7=LMCACHE_GDS_PATH, 8=LMCACHE_CUFILE_BUFFER_SIZE,
+  #   9=LMCACHE_LOCAL_CPU, 10=LMCACHE_EXTRA_CONFIG,
+  #   11=PROMETHEUS_MULTIPROC_DIR
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/containers/0/env/11
+      - op: remove
+        path: /spec/template/spec/containers/0/env/10
+      - op: remove
+        path: /spec/template/spec/containers/0/env/9
+      - op: remove
+        path: /spec/template/spec/containers/0/env/8
+      - op: remove
+        path: /spec/template/spec/containers/0/env/7
+      - op: remove
+        path: /spec/template/spec/containers/0/env/6
+      - op: remove
+        path: /spec/template/spec/containers/0/env/5
+
+  # Remove lmcache-prometheus volume and volumeMount (not needed without LMCache)
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/containers/0/volumeMounts/3
+      - op: remove
+        path: /spec/template/spec/volumes/3
+
+  # EPP: remove hardcoded --pool-namespace so it uses NAMESPACE env var from downward API
+  - target:
+      kind: Deployment
+      name: weka-vllm-epp
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/containers/0/args/2
+      - op: remove
+        path: /spec/template/spec/containers/0/args/2
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
