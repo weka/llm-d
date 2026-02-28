@@ -4,7 +4,6 @@ namespace: weka-ofer
 
 resources:
   - ../aggregated-weka
-  - lmcache-config.yaml
 
 patches:
   - target:
