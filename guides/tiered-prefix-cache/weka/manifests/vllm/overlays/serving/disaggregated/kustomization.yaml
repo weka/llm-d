@@ -1,0 +1,35 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Disaggregated serving mode: separate decode + prefill deployments
+# with gateway infrastructure (Istio gateway, EnvoyFilter).
+# NixlConnector-only by default. Apply cache mixins to add LMCache.
+
+namespace: weka
+
+resources:
+  - ../decode
+  - ../prefill
+
+components:
+  - ../../shared/weka-infra
+
+patches:
+  # Use IfNotPresent for init containers (images pinned by sha tag)
+  - target:
+      kind: Deployment
+      name: decode
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/initContainers/0/imagePullPolicy
+        value: IfNotPresent
+      - op: replace
+        path: /spec/template/spec/initContainers/1/imagePullPolicy
+        value: IfNotPresent
+  - target:
+      kind: Deployment
+      name: prefill
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/initContainers/0/imagePullPolicy
+        value: IfNotPresent

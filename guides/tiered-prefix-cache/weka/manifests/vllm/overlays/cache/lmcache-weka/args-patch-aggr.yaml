@@ -1,0 +1,8 @@
+# Add --kv-transfer-config with LMCacheConnectorV1 for aggregated mode.
+# Appends to the args array — no index management needed.
+- op: add
+  path: /spec/template/spec/containers/0/args/-
+  value: "--kv-transfer-config"
+- op: add
+  path: /spec/template/spec/containers/0/args/-
+  value: '{"kv_connector":"LMCacheConnectorV1","kv_role":"kv_both"}'

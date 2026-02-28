@@ -38,8 +38,6 @@ patches:
           - "RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic"
           - "--block-size"
           - "128"
-          - "--kv-transfer-config"
-          - '{"kv_connector":"NixlConnector", "kv_role":"kv_both"}'
           - "--disable-log-requests"
           - "--disable-uvicorn-access-log"
           - "--max-model-len"
@@ -90,41 +88,6 @@ patches:
         value:
           name: NVIDIA_GDS
           value: "enabled"
-      - op: add
-        path: /spec/template/spec/containers/0/env/-
-        value:
-          name: LMCACHE_USE_EXPERIMENTAL
-          value: "true"
-      - op: add
-        path: /spec/template/spec/containers/0/env/-
-        value:
-          name: LMCACHE_CHUNK_SIZE
-          value: "256"
-      - op: add
-        path: /spec/template/spec/containers/0/env/-
-        value:
-          name: LMCACHE_GDS_PATH
-          value: /mnt/weka/cache
-      - op: add
-        path: /spec/template/spec/containers/0/env/-
-        value:
-          name: LMCACHE_CUFILE_BUFFER_SIZE
-          value: "8192"
-      - op: add
-        path: /spec/template/spec/containers/0/env/-
-        value:
-          name: LMCACHE_LOCAL_CPU
-          value: "false"
-      - op: add
-        path: /spec/template/spec/containers/0/env/-
-        value:
-          name: LMCACHE_EXTRA_CONFIG
-          value: '{"gds_io_threads": 16}'
-      - op: add
-        path: /spec/template/spec/containers/0/env/-
-        value:
-          name: PROMETHEUS_MULTIPROC_DIR
-          value: /tmp/lmcache_prometheus
       - op: add
         path: /spec/template/spec/containers/0/env/-
         value:
@@ -312,19 +275,3 @@ patches:
           mountPath: /etc/cufile.json
           subPath: cufile.json
           readOnly: true
-
-  # Add emptyDir volume for LMCache prometheus multiproc dir
-  - target:
-      kind: Deployment
-      name: llm-d-model-server
-    patch: |-
-      - op: add
-        path: /spec/template/spec/volumes/-
-        value:
-          name: lmcache-prometheus
-          emptyDir: {}
-      - op: add
-        path: /spec/template/spec/containers/0/volumeMounts/-
-        value:
-          name: lmcache-prometheus
-          mountPath: /tmp/lmcache_prometheus

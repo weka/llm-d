@@ -1,0 +1,35 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: weka
+
+# Aggregated mode, GPU-only KV cache (no LMCache), KV-aware routing via EPP.
+
+resources:
+  - ../../serving/aggregated
+
+helmCharts:
+  - name: inferencepool
+    repo: oci://registry.k8s.io/gateway-api-inference-extension/charts
+    version: v1.3.0
+    namespace: weka
+    releaseName: weka-vllm
+    valuesFile: ../../epp/kv-aware.values.yaml
+
+patches:
+  # Override args: block-size 64 for KV-aware routing, no --kv-transfer-config
+  - path: deployment-patch.yaml
+
+  # KV-aware routing env vars (POD_IP + LMCACHE_ENABLE_KV_EVENTS)
+  - path: ../../cache/kv-aware/deployment-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # EPP: use IfNotPresent for image pinned by tag
+  - target:
+      kind: Deployment
+      name: weka-vllm-epp
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent

@@ -1,0 +1,49 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Aggregated serving mode: single deployment, NO LMCache by default,
+# with gateway infrastructure (Istio gateway, EnvoyFilter).
+# Apply mixin-lmcache-* to add LMCache. No --kv-transfer-config in base.
+
+namespace: weka
+
+resources:
+  - ../../../base
+
+components:
+  - ../../shared/weka-infra
+
+patches:
+  # Apply strategic merge patch for aggregated configuration
+  # Sets replicas, role labels, args (no --kv-transfer-config), resources, probes
+  - path: deployment-patch.yaml
+
+  # Remove VLLM_NIXL_SIDE_CHANNEL_HOST env var (not needed for aggregated mode)
+  # This is index 0 in the env list added by base (after HF_TOKEN removal)
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/containers/0/env/0
+
+  # Set port for aggregated: 8000 (vLLM API)
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/ports
+        value:
+          - containerPort: 8000
+            name: http
+            protocol: TCP
+
+  # Use IfNotPresent for init container (image pinned by sha tag)
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/initContainers/0/imagePullPolicy
+        value: IfNotPresent

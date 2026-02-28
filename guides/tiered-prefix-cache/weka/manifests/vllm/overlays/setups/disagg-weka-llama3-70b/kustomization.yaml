@@ -1,0 +1,58 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: weka
+
+# Disaggregated with Weka GDS LMCache, P/D routing via EPP.
+
+resources:
+  - ../../serving/disaggregated
+
+helmCharts:
+  - name: inferencepool
+    repo: oci://registry.k8s.io/gateway-api-inference-extension/charts
+    version: v1.3.0
+    namespace: weka
+    releaseName: weka-vllm
+    valuesFile: ../../epp/disagg.values.yaml
+
+patches:
+  # Add LMCache Weka GDS env vars to decode and prefill (not EPP)
+  - path: ../../cache/lmcache-weka/env-patch.yaml
+    target:
+      kind: Deployment
+      name: decode
+  - path: ../../cache/lmcache-weka/env-patch.yaml
+    target:
+      kind: Deployment
+      name: prefill
+
+  # Add lmcache-prometheus volume + volumeMount to decode and prefill
+  - path: ../../cache/lmcache-weka/volume-patch.yaml
+    target:
+      kind: Deployment
+      name: decode
+  - path: ../../cache/lmcache-weka/volume-patch.yaml
+    target:
+      kind: Deployment
+      name: prefill
+
+  # Replace NixlConnector → MultiConnector for decode
+  - path: ../../cache/lmcache-weka/args-patch-disagg.yaml
+    target:
+      kind: Deployment
+      name: decode
+
+  # Replace NixlConnector → MultiConnector for prefill
+  - path: ../../cache/lmcache-weka/args-patch-disagg.yaml
+    target:
+      kind: Deployment
+      name: prefill
+
+  # EPP: use IfNotPresent for image pinned by tag
+  - target:
+      kind: Deployment
+      name: weka-vllm-epp
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent

@@ -1,0 +1,68 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: weka
+
+# Disaggregated with DRAM-based LMCache, P/D routing via EPP.
+
+resources:
+  - ../../serving/disaggregated
+
+helmCharts:
+  - name: inferencepool
+    repo: oci://registry.k8s.io/gateway-api-inference-extension/charts
+    version: v1.3.0
+    namespace: weka
+    releaseName: weka-vllm
+    valuesFile: ../../epp/disagg.values.yaml
+
+patches:
+  # Add LMCache DRAM env vars to decode and prefill (not EPP)
+  - path: ../../cache/lmcache-dram/env-patch.yaml
+    target:
+      kind: Deployment
+      name: decode
+  - path: ../../cache/lmcache-dram/env-patch.yaml
+    target:
+      kind: Deployment
+      name: prefill
+
+  # Add lmcache-prometheus volume + volumeMount to decode and prefill
+  - path: ../../cache/lmcache-dram/volume-patch.yaml
+    target:
+      kind: Deployment
+      name: decode
+  - path: ../../cache/lmcache-dram/volume-patch.yaml
+    target:
+      kind: Deployment
+      name: prefill
+
+  # Replace NixlConnector → MultiConnector for decode
+  - path: ../../cache/lmcache-dram/args-patch-disagg.yaml
+    target:
+      kind: Deployment
+      name: decode
+
+  # Replace NixlConnector → MultiConnector for prefill
+  - path: ../../cache/lmcache-dram/args-patch-disagg.yaml
+    target:
+      kind: Deployment
+      name: prefill
+
+  # Increase memory for DRAM cache (decode and prefill only)
+  - path: ../../cache/lmcache-dram/memory-patch.yaml
+    target:
+      kind: Deployment
+      name: decode
+  - path: ../../cache/lmcache-dram/memory-patch.yaml
+    target:
+      kind: Deployment
+      name: prefill
+
+  # EPP: use IfNotPresent for image pinned by tag
+  - target:
+      kind: Deployment
+      name: weka-vllm-epp
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent

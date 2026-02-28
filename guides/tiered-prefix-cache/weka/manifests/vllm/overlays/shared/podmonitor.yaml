@@ -1,0 +1,14 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: llm-d-model-server
+  labels:
+    llm-d.ai/inference-serving: "true"
+spec:
+  selector:
+    matchLabels:
+      llm-d.ai/inference-serving: "true"
+  podMetricsEndpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

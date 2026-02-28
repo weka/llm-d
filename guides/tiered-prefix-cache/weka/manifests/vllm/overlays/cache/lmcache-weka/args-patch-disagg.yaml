@@ -1,0 +1,5 @@
+# Replace NixlConnector with MultiConnector (LMCache + Nixl) for disaggregated mode.
+# Arg index 10 is the kv-transfer-config JSON value in decode/prefill deployment patches.
+- op: replace
+  path: /spec/template/spec/containers/0/args/10
+  value: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"LMCacheConnectorV1","kv_role":"kv_both"},{"kv_connector":"NixlConnector","kv_role":"kv_both"}]}}'

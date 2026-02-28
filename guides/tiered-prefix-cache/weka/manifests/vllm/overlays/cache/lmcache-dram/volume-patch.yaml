@@ -1,0 +1,11 @@
+# Add lmcache-prometheus emptyDir volume and volumeMount.
+- op: add
+  path: /spec/template/spec/volumes/-
+  value:
+    name: lmcache-prometheus
+    emptyDir: {}
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts/-
+  value:
+    name: lmcache-prometheus
+    mountPath: /tmp/lmcache_prometheus

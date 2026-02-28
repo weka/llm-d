@@ -1,0 +1,37 @@
+# Additive LMCache env vars for DRAM backend.
+# All ops use path: .../env/- (append) — no index management needed.
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: LMCACHE_USE_EXPERIMENTAL
+    value: "true"
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: LMCACHE_CHUNK_SIZE
+    value: "256"
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: LMCACHE_LOCAL_CPU
+    value: "true"
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: LMCACHE_MAX_LOCAL_CPU_SIZE
+    value: "300"
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: LMCACHE_PRE_CACHING_HASH_ALGORITHM
+    value: "sha256"
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: LMCACHE_SAVE_DECODE_CACHE
+    value: "false"
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: PROMETHEUS_MULTIPROC_DIR
+    value: /tmp/lmcache_prometheus

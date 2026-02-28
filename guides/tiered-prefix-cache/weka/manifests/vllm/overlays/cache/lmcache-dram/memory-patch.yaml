@@ -1,0 +1,7 @@
+# Increase memory for DRAM-based LMCache (needs headroom for CPU cache).
+- op: replace
+  path: /spec/template/spec/containers/0/resources/limits/memory
+  value: 1524Gi
+- op: replace
+  path: /spec/template/spec/containers/0/resources/requests/memory
+  value: 1524Gi

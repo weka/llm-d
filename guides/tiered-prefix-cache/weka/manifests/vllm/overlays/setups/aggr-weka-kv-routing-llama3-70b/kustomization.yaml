@@ -1,0 +1,59 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: weka
+
+# Aggregated mode with Weka GDS LMCache + KV-aware routing via EPP.
+
+resources:
+  - ../../serving/aggregated
+
+helmCharts:
+  - name: inferencepool
+    repo: oci://registry.k8s.io/gateway-api-inference-extension/charts
+    version: v1.3.0
+    namespace: weka
+    releaseName: weka-vllm
+    valuesFile: ../../epp/kv-aware.values.yaml
+
+patches:
+  # Override block-size to 64 for KV-aware routing
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/args/8
+        value: "64"
+
+  # Add LMCache Weka GDS env vars
+  - path: ../../cache/lmcache-weka/env-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Add lmcache-prometheus volume + volumeMount
+  - path: ../../cache/lmcache-weka/volume-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Add --kv-transfer-config with LMCacheConnectorV1
+  - path: ../../cache/lmcache-weka/args-patch-aggr.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # KV-aware routing env vars (POD_IP + LMCACHE_ENABLE_KV_EVENTS)
+  - path: ../../cache/kv-aware/deployment-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # EPP: use IfNotPresent for image pinned by tag
+  - target:
+      kind: Deployment
+      name: weka-vllm-epp
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
