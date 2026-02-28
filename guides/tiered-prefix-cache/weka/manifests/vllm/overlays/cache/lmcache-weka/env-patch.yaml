@@ -23,11 +23,6 @@
 - op: add
   path: /spec/template/spec/containers/0/env/-
   value:
-    name: LMCACHE_LOCAL_CPU
-    value: "false"
-- op: add
-  path: /spec/template/spec/containers/0/env/-
-  value:
     name: LMCACHE_EXTRA_CONFIG
     value: '{"gds_io_threads": 16}'
 - op: add

@@ -1,4 +1,4 @@
-# Override args: no --kv-transfer-config (GPU-only HBM cache), block-size 64 for KV-aware routing.
+# Override args: no --kv-transfer-config (GPU-only HBM cache), block-size 256 for KV-aware routing (matches LMCACHE_CHUNK_SIZE=256).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,7 +17,7 @@ spec:
         - --tensor-parallel-size
         - '4'
         - --block-size
-        - '64'
+        - '256'
         - --gpu-memory-utilization
         - '0.80'
         - --disable-log-requests

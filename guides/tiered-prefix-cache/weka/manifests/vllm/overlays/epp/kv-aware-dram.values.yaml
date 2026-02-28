@@ -1,5 +1,6 @@
-# Inferencepool values for KV-aware routing with precise-prefix-cache-scorer.
+# Inferencepool values for KV-aware routing with DRAM-extended cache capacity.
 # hashSeed must match PYTHONHASHSEED set on vLLM pods (0 in this deployment).
+# lruCapacityPerServer sized for GPU (~2,300 blocks) + DRAM (~60,000 blocks).
 inferenceExtension:
   replicas: 1
   image:
@@ -33,6 +34,10 @@ inferenceExtension:
               socketPort: 5557
       - type: kv-cache-utilization-scorer
       - type: queue-scorer
+        parameters:
+          hashBlockSize: 5
+          maxPrefixBlocksToMatch: 512
+          lruCapacityPerServer: 62500
       - type: max-score-picker
       schedulingProfiles:
       - name: default
