@@ -3,7 +3,7 @@ kind: ConfigMap
 metadata:
   name: lmcache-config
 data:
-  config.yaml:
+  config.yaml: |
     # LMCache Configuration for WEKA GDS - Dev/Debug
     # Edit with: kubectl edit configmap lmcache-config -n weka
     # Then restart: kubectl rollout restart deployment/decode deployment/prefill -n weka
