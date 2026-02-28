@@ -1,5 +1,5 @@
-# Override aggregated-weka args: remove --kv-transfer-config (no LMCache connector).
-# This setup relies only on GPU HBM KV cache with KV-aware routing.
+# Override aggregated-weka args: keep LMCacheConnectorV1 but use block-size 64
+# for compatibility with the precise-prefix-cache-scorer in the EPP.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -19,6 +19,8 @@ spec:
         - '4'
         - --block-size
         - '64'
+        - --kv-transfer-config
+        - '{"kv_connector":"LMCacheConnectorV1","kv_role":"kv_both"}'
         - --gpu-memory-utilization
         - '0.80'
         - --disable-log-requests

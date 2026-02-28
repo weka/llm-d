@@ -1,0 +1,47 @@
+# DRAM cache mixin: switch LMCache from GDS/Weka to DRAM mode.
+# Expects base env vars at these indices (after aggregated-weka processing):
+#   5=LMCACHE_USE_EXPERIMENTAL, 6=LMCACHE_CHUNK_SIZE,
+#   7=LMCACHE_GDS_PATH, 8=LMCACHE_CUFILE_BUFFER_SIZE,
+#   9=LMCACHE_LOCAL_CPU, 10=LMCACHE_EXTRA_CONFIG,
+#   11=PROMETHEUS_MULTIPROC_DIR
+#
+# Changes:
+#   - LMCACHE_LOCAL_CPU "false" → "true"
+#   - Remove GDS-specific: LMCACHE_GDS_PATH, LMCACHE_CUFILE_BUFFER_SIZE, LMCACHE_EXTRA_CONFIG
+#   - Add DRAM-specific: LMCACHE_MAX_LOCAL_CPU_SIZE, LMCACHE_PRE_CACHING_HASH_ALGORITHM, LMCACHE_SAVE_DECODE_CACHE
+#   - Increase memory to 1524Gi (DRAM cache needs headroom)
+
+# Enable DRAM mode
+- op: replace
+  path: /spec/template/spec/containers/0/env/9/value
+  value: "true"
+# Remove GDS-specific vars (highest index first)
+- op: remove
+  path: /spec/template/spec/containers/0/env/10
+- op: remove
+  path: /spec/template/spec/containers/0/env/8
+- op: remove
+  path: /spec/template/spec/containers/0/env/7
+# Add DRAM-specific vars
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: LMCACHE_MAX_LOCAL_CPU_SIZE
+    value: "300"
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: LMCACHE_PRE_CACHING_HASH_ALGORITHM
+    value: "sha256"
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: LMCACHE_SAVE_DECODE_CACHE
+    value: "false"
+# Increase memory for DRAM cache
+- op: replace
+  path: /spec/template/spec/containers/0/resources/limits/memory
+  value: 1524Gi
+- op: replace
+  path: /spec/template/spec/containers/0/resources/requests/memory
+  value: 1524Gi

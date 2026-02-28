@@ -13,3 +13,12 @@
   value:
     name: LMCACHE_ENABLE_KV_EVENTS
     value: "true"
+# KV events config: enable ZMQ publisher so the EPP can track which pods
+# hold which KV cache blocks. $(POD_IP) is substituted by Kubernetes from
+# the POD_IP env var added above.
+- op: add
+  path: /spec/template/spec/containers/0/args/-
+  value: "--kv-events-config"
+- op: add
+  path: /spec/template/spec/containers/0/args/-
+  value: '{"enable_kv_cache_events":true,"publisher":"zmq","endpoint":"tcp://*:5557","topic":"kv@$(POD_IP)@RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic"}'
