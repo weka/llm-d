@@ -1,0 +1,7 @@
+# Explicitly disable CPU/DRAM-based LMCache.
+# Use in pure-Weka setups to make caching intent unambiguous.
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: LMCACHE_LOCAL_CPU
+    value: "false"

@@ -1,0 +1,90 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: weka
+
+# Aggregated mode with DRAM-based LMCache + KV-aware routing via EPP.
+# Model: MiniMaxAI/MiniMax-M2.1 (MoE, TP8).
+
+resources:
+  - ../../serving/aggregated
+
+helmCharts:
+  - name: inferencepool
+    repo: oci://registry.k8s.io/gateway-api-inference-extension/charts
+    version: v1.3.0
+    namespace: weka
+    releaseName: weka-vllm
+    valuesFile: ../../model/minimax-m2.1/epp-kv-aware-dram.values.yaml
+
+patches:
+  # Override args for minimax-m2.1
+  - path: ../../model/minimax-m2.1/args-patch-aggr.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Override block-size to 256 for KV-aware routing (matches LMCACHE_CHUNK_SIZE=256)
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/args/9
+        value: "256"
+
+  # Override GPU count for TP8
+  - path: ../../model/minimax-m2.1/gpu-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # MiniMax-specific env vars
+  - path: ../../model/minimax-m2.1/env-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Add LMCache DRAM env vars
+  - path: ../../cache/lmcache-dram/env-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Add lmcache-prometheus volume + volumeMount
+  - path: ../../cache/lmcache-dram/volume-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Add --kv-transfer-config with LMCacheConnectorV1
+  - path: ../../cache/lmcache-dram/args-patch-aggr.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Increase memory for DRAM cache
+  - path: ../../cache/lmcache-dram/memory-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Override DRAM size for TP8 (150 GB vs 300 GB default)
+  - path: ../../model/minimax-m2.1/dram-size-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # KV-aware routing env vars + KV events config
+  - path: ../../model/minimax-m2.1/kv-events-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # EPP: use IfNotPresent for image pinned by tag
+  - target:
+      kind: Deployment
+      name: weka-vllm-epp
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent

@@ -1,0 +1,6 @@
+# Override DRAM cache size for TP8 (150 GB vs 300 GB for TP4 models).
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: LMCACHE_MAX_LOCAL_CPU_SIZE
+    value: "150"

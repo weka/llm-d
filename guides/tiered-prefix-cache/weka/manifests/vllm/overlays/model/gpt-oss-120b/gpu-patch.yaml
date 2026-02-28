@@ -1,0 +1,7 @@
+# Override GPU resources for TP8 (8x H100).
+- op: replace
+  path: /spec/template/spec/containers/0/resources/limits/nvidia.com~1gpu
+  value: "8"
+- op: replace
+  path: /spec/template/spec/containers/0/resources/requests/nvidia.com~1gpu
+  value: "8"

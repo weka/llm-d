@@ -1,0 +1,6 @@
+# MiniMax M2.1 requires SAFETENSORS_FAST_GPU for model loading.
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: SAFETENSORS_FAST_GPU
+    value: "1"

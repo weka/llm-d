@@ -2,7 +2,8 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: weka
 
-# Aggregated mode with Weka GDS LMCache, basic routing via EPP.
+# Aggregated mode with Weka GDS LMCache, basic routing.
+# Model: openai/gpt-oss-120b (MoE, TP8).
 
 resources:
   - ../../serving/aggregated
@@ -16,6 +17,18 @@ helmCharts:
     valuesFile: ../../epp/aggregated.values.yaml
 
 patches:
+  # Override args for gpt-oss-120b
+  - path: ../../model/gpt-oss-120b/args-patch-aggr.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Override GPU count for TP8
+  - path: ../../model/gpt-oss-120b/gpu-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
   # Add LMCache Weka GDS env vars
   - path: ../../cache/lmcache-weka/env-patch.yaml
     target:
