@@ -19,7 +19,13 @@ patches:
   # Override args: block-size 64 for KV-aware routing, no --kv-transfer-config
   - path: deployment-patch.yaml
 
-  # KV-aware routing env vars (POD_IP + LMCACHE_ENABLE_KV_EVENTS)
+  # Model-specific env vars (MODEL_NAME for KV events topic)
+  - path: ../../model/llama3-70b/env-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # KV-aware routing (POD_IP, LMCACHE_ENABLE_KV_EVENTS, --kv-events-config, ZMQ port)
   - path: ../../cache/kv-aware/deployment-patch.yaml
     target:
       kind: Deployment

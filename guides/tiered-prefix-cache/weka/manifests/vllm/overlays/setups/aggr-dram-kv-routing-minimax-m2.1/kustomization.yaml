@@ -29,7 +29,7 @@ patches:
       name: llm-d-model-server
     patch: |-
       - op: replace
-        path: /spec/template/spec/containers/0/args/9
+        path: /spec/template/spec/containers/0/args/10
         value: "256"
 
   # Override GPU count for TP8
@@ -74,8 +74,14 @@ patches:
       kind: Deployment
       name: llm-d-model-server
 
-  # KV-aware routing env vars + KV events config
-  - path: ../../model/minimax-m2.1/kv-events-patch.yaml
+  # KV-aware routing (POD_IP, LMCACHE_ENABLE_KV_EVENTS, --kv-events-config, ZMQ port)
+  - path: ../../cache/kv-aware/deployment-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Increase startup probe failureThreshold for slow MiniMax M2.1 model load
+  - path: ../../model/minimax-m2.1/startup-probe-patch.yaml
     target:
       kind: Deployment
       name: llm-d-model-server

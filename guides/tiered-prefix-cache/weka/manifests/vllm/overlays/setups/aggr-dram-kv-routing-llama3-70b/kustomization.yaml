@@ -25,6 +25,12 @@ patches:
         path: /spec/template/spec/containers/0/args/8
         value: "256"
 
+  # Model-specific env vars (MODEL_NAME for KV events topic)
+  - path: ../../model/llama3-70b/env-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
   # Add LMCache DRAM env vars
   - path: ../../cache/lmcache-dram/env-patch.yaml
     target:
@@ -49,7 +55,7 @@ patches:
       kind: Deployment
       name: llm-d-model-server
 
-  # KV-aware routing env vars (POD_IP + LMCACHE_ENABLE_KV_EVENTS)
+  # KV-aware routing (POD_IP, LMCACHE_ENABLE_KV_EVENTS, --kv-events-config, ZMQ port)
   - path: ../../cache/kv-aware/deployment-patch.yaml
     target:
       kind: Deployment

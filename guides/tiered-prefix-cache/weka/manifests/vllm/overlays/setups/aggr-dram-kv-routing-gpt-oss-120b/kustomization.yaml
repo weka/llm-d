@@ -38,6 +38,12 @@ patches:
       kind: Deployment
       name: llm-d-model-server
 
+  # Model-specific env vars (MODEL_NAME for KV events topic)
+  - path: ../../model/gpt-oss-120b/env-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
   # Add LMCache DRAM env vars
   - path: ../../cache/lmcache-dram/env-patch.yaml
     target:
@@ -68,8 +74,8 @@ patches:
       kind: Deployment
       name: llm-d-model-server
 
-  # KV-aware routing env vars + KV events config
-  - path: ../../model/gpt-oss-120b/kv-events-patch.yaml
+  # KV-aware routing (POD_IP, LMCACHE_ENABLE_KV_EVENTS, --kv-events-config, ZMQ port)
+  - path: ../../cache/kv-aware/deployment-patch.yaml
     target:
       kind: Deployment
       name: llm-d-model-server

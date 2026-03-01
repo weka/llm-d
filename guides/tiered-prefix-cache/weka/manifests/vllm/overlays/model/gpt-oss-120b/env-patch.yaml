@@ -1,0 +1,6 @@
+# Used by cache/kv-aware/deployment-patch.yaml in the KV events topic.
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: MODEL_NAME
+    value: "openai/gpt-oss-120b"

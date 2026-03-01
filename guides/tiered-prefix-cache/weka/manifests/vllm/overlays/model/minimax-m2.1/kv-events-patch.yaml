@@ -1,7 +1,0 @@
-# Add KV events config for MiniMaxAI/MiniMax-M2.1.
-- op: add
-  path: /spec/template/spec/containers/0/args/-
-  value: "--kv-events-config"
-- op: add
-  path: /spec/template/spec/containers/0/args/-
-  value: '{"enable_kv_cache_events":true,"publisher":"zmq","endpoint":"tcp://*:5557","topic":"kv@$(POD_IP)@MiniMaxAI/MiniMax-M2.1"}'

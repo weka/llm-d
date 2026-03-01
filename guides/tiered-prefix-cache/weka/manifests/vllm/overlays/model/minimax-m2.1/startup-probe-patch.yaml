@@ -1,0 +1,4 @@
+# Increase startup probe failureThreshold for MiniMax M2.1 (large MoE model, slow to load).
+- op: replace
+  path: /spec/template/spec/containers/0/startupProbe/failureThreshold
+  value: 180

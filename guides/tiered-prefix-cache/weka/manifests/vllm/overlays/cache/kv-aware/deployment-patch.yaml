@@ -1,6 +1,5 @@
-# KV-aware routing: add POD_IP env var so the ZMQ topic in --kv-events-config
-# substitutes the real pod IP, and LMCACHE_ENABLE_KV_EVENTS so KV blocks are
-# visible to the precise-prefix-cache-scorer in the EPP.
+# KV-aware routing infrastructure (model-agnostic).
+# Requires MODEL_NAME env var to be set by the model overlay.
 - op: add
   path: /spec/template/spec/containers/0/env/-
   value:
@@ -13,15 +12,14 @@
   value:
     name: LMCACHE_ENABLE_KV_EVENTS
     value: "true"
-# KV events config: enable ZMQ publisher so the EPP can track which pods
-# hold which KV cache blocks. $(POD_IP) is substituted by Kubernetes from
-# the POD_IP env var added above.
+# KV events config: $(POD_IP) and $(MODEL_NAME) are substituted by Kubernetes
+# from env vars defined above and in the model overlay respectively.
 - op: add
   path: /spec/template/spec/containers/0/args/-
   value: "--kv-events-config"
 - op: add
   path: /spec/template/spec/containers/0/args/-
-  value: '{"enable_kv_cache_events":true,"publisher":"zmq","endpoint":"tcp://*:5557","topic":"kv@$(POD_IP)@RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic"}'
+  value: '{"enable_kv_cache_events":true,"publisher":"zmq","endpoint":"tcp://*:5557","topic":"kv@$(POD_IP)@$(MODEL_NAME)"}'
 # Expose ZMQ kv-events port so EPP can discover and connect to it.
 - op: add
   path: /spec/template/spec/containers/0/ports/-
