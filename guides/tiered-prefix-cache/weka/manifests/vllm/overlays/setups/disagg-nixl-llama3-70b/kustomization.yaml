@@ -16,6 +16,16 @@ helmCharts:
     valuesFile: ../../epp/disagg.values.yaml
 
 patches:
+  # Model-specific env vars (MODEL_NAME)
+  - path: ../../model/llama3-70b/env-patch.yaml
+    target:
+      kind: Deployment
+      name: decode
+  - path: ../../model/llama3-70b/env-patch.yaml
+    target:
+      kind: Deployment
+      name: prefill
+
   # EPP: use IfNotPresent for image pinned by tag
   - target:
       kind: Deployment

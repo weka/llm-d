@@ -14,7 +14,7 @@ helmCharts:
     version: v1.3.0
     namespace: weka
     releaseName: weka-vllm
-    valuesFile: ../../model/gpt-oss-120b/epp-kv-aware-dram.values.yaml
+    valuesFile: ../../epp/kv-aware-dram.values.yaml
 
 patches:
   # Override args for gpt-oss-120b
@@ -79,6 +79,9 @@ patches:
     target:
       kind: Deployment
       name: llm-d-model-server
+
+  # EPP: add model-specific scoring config to ConfigMap
+  - path: ../../model/gpt-oss-120b/epp-configmap-patch.yaml
 
   # EPP: use IfNotPresent for image pinned by tag
   - target:

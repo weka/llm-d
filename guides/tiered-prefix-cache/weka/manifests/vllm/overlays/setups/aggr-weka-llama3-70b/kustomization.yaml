@@ -16,6 +16,12 @@ helmCharts:
     valuesFile: ../../epp/aggregated.values.yaml
 
 patches:
+  # Model-specific env vars (MODEL_NAME)
+  - path: ../../model/llama3-70b/env-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
   # Add LMCache Weka GDS env vars
   - path: ../../cache/lmcache-weka/env-patch.yaml
     target:

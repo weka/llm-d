@@ -61,6 +61,9 @@ patches:
       kind: Deployment
       name: llm-d-model-server
 
+  # EPP: add model-specific scoring config to ConfigMap
+  - path: ../../model/llama3-70b/epp-configmap-patch.yaml
+
   # EPP: use IfNotPresent for image pinned by tag
   - target:
       kind: Deployment

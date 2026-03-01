@@ -16,6 +16,16 @@ helmCharts:
     valuesFile: ../../epp/disagg.values.yaml
 
 patches:
+  # Model-specific env vars (MODEL_NAME)
+  - path: ../../model/llama3-70b/env-patch.yaml
+    target:
+      kind: Deployment
+      name: decode
+  - path: ../../model/llama3-70b/env-patch.yaml
+    target:
+      kind: Deployment
+      name: prefill
+
   # Add LMCache Weka GDS env vars to decode and prefill (not EPP)
   - path: ../../cache/lmcache-weka/env-patch.yaml
     target:
