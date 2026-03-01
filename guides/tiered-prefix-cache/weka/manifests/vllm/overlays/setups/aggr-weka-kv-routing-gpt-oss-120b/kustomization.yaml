@@ -23,15 +23,6 @@ patches:
       kind: Deployment
       name: llm-d-model-server
 
-  # Override block-size to 256 for KV-aware routing (matches LMCACHE_CHUNK_SIZE=256)
-  - target:
-      kind: Deployment
-      name: llm-d-model-server
-    patch: |-
-      - op: replace
-        path: /spec/template/spec/containers/0/args/8
-        value: "256"
-
   # Override GPU count for TP8
   - path: ../../model/gpt-oss-120b/gpu-patch.yaml
     target:
