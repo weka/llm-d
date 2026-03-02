@@ -7,6 +7,7 @@ namespace: weka
 
 resources:
   - ../../serving/aggregated
+  - ../../model/gpt-oss-120b/chat-template-configmap.yaml
 
 helmCharts:
   - name: inferencepool
@@ -31,6 +32,12 @@ patches:
 
   # Model-specific env vars (MODEL_NAME)
   - path: ../../model/gpt-oss-120b/env-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Mount chat_template.jinja ConfigMap into vLLM (required by --chat-template in args)
+  - path: ../../model/gpt-oss-120b/vllm-chat-template-patch.yaml
     target:
       kind: Deployment
       name: llm-d-model-server

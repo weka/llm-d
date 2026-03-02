@@ -18,11 +18,6 @@
 - op: add
   path: /spec/template/spec/containers/0/env/-
   value:
-    name: LMCACHE_MAX_LOCAL_CPU_SIZE
-    value: "300"
-- op: add
-  path: /spec/template/spec/containers/0/env/-
-  value:
     name: LMCACHE_PRE_CACHING_HASH_ALGORITHM
     value: "sha256"
 - op: add

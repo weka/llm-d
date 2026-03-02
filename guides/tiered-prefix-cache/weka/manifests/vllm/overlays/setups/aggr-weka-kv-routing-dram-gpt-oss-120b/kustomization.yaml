@@ -2,11 +2,13 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: weka
 
-# Aggregated mode with DRAM-based LMCache + KV-aware routing via EPP.
-# Model: MiniMaxAI/MiniMax-M2.1 (MoE, TP8).
+# Aggregated mode with Weka GDS + DRAM tiered LMCache + KV-aware routing.
+# Model: openai/gpt-oss-120b (MoE, TP8).
 
 resources:
   - ../../serving/aggregated
+  - ../../model/gpt-oss-120b/chat-template-configmap.yaml
+  - ../../epp/envoyfilter-extproc-insert.yaml
 
 helmCharts:
   - name: inferencepool
@@ -14,50 +16,53 @@ helmCharts:
     version: v1.3.0
     namespace: weka
     releaseName: weka-vllm
-    valuesFile: ../../epp/kv-aware-dram.values.yaml
+    valuesFile: ../../epp/kv-aware-disagg.values.yaml
 
 patches:
-  # Override args for minimax-m2.1
-  - path: ../../model/minimax-m2.1/args-patch-aggr.yaml
+  # Override args for gpt-oss-120b
+  - path: ../../model/gpt-oss-120b/args-patch-aggr.yaml
     target:
       kind: Deployment
       name: llm-d-model-server
-
-  # Override block-size to 256 for KV-aware routing (matches LMCACHE_CHUNK_SIZE=256)
-  - target:
-      kind: Deployment
-      name: llm-d-model-server
-    patch: |-
-      - op: replace
-        path: /spec/template/spec/containers/0/args/10
-        value: "256"
 
   # Override GPU count for TP8
-  - path: ../../model/minimax-m2.1/gpu-patch.yaml
+  - path: ../../model/gpt-oss-120b/gpu-patch.yaml
     target:
       kind: Deployment
       name: llm-d-model-server
 
-  # MiniMax-specific env vars
-  - path: ../../model/minimax-m2.1/env-patch.yaml
+  # Model-specific env vars (MODEL_NAME for KV events topic)
+  - path: ../../model/gpt-oss-120b/env-patch.yaml
     target:
       kind: Deployment
       name: llm-d-model-server
 
-  # Add LMCache DRAM env vars
-  - path: ../../cache/lmcache-dram/env-patch.yaml
+  # Mount chat_template.jinja ConfigMap into vLLM (same template as EPP tokenizer)
+  - path: ../../model/gpt-oss-120b/vllm-chat-template-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Add LMCache Weka GDS env vars
+  - path: ../../cache/lmcache-weka/env-patch.yaml
     target:
       kind: Deployment
       name: llm-d-model-server
 
   # Add lmcache-prometheus volume + volumeMount
-  - path: ../../cache/lmcache-dram/volume-patch.yaml
+  - path: ../../cache/lmcache-weka/volume-patch.yaml
     target:
       kind: Deployment
       name: llm-d-model-server
 
   # Add --kv-transfer-config with LMCacheConnectorV1
-  - path: ../../cache/lmcache-dram/args-patch-aggr.yaml
+  - path: ../../cache/lmcache-weka/args-patch-aggr.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Add DRAM tier on top of Weka
+  - path: ../../cache/dram-tier/env-patch.yaml
     target:
       kind: Deployment
       name: llm-d-model-server
@@ -69,7 +74,7 @@ patches:
       name: llm-d-model-server
 
   # Override DRAM size for TP8 (150 GB vs 300 GB default)
-  - path: ../../model/minimax-m2.1/dram-size-patch.yaml
+  - path: ../../model/gpt-oss-120b/dram-size-patch.yaml
     target:
       kind: Deployment
       name: llm-d-model-server
@@ -80,14 +85,14 @@ patches:
       kind: Deployment
       name: llm-d-model-server
 
-  # Increase startup probe failureThreshold for slow MiniMax M2.1 model load
-  - path: ../../model/minimax-m2.1/startup-probe-patch.yaml
+  # EPP: add model-specific scoring config to ConfigMap (disaggregated tokenization via UDS)
+  - path: ../../model/gpt-oss-120b/epp-configmap-patch-disagg.yaml
+
+  # Mount chat_template.jinja into tokenizer sidecar (not included in HF tokenizer download)
+  - path: ../../model/gpt-oss-120b/epp-sidecar-chat-template-patch.yaml
     target:
       kind: Deployment
-      name: llm-d-model-server
-
-  # EPP: add model-specific scoring config to ConfigMap
-  - path: ../../model/minimax-m2.1/epp-configmap-patch.yaml
+      name: weka-vllm-epp
 
   # EPP: use IfNotPresent for image pinned by tag
   - target:

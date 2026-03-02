@@ -1,6 +1,7 @@
-# Strategic merge patch: adds precise-prefix-cache-scorer config to EPP ConfigMap.
+# Strategic merge patch: EPP config with disaggregated tokenization (UDS sidecar).
+# Uses llm-d-uds-tokenizer sidecar for tokenization via Unix domain socket,
+# ensuring identical tokenization between EPP and vLLM.
 # hashSeed must match PYTHONHASHSEED on vLLM pods (0 in this deployment).
-# lruCapacityPerServer sized for GPU (~2,300 blocks) + DRAM (~60,000 blocks).
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -20,8 +21,10 @@ data:
         indexerConfig:
           tokenizersPoolConfig:
             modelName: openai/gpt-oss-120b
-            hf:
-              tokenizersCacheDir: /tmp/tokenizers
+            hf: null
+            local: null
+            uds:
+              socketFile: /tmp/tokenizer/tokenizer-uds.socket
         kvEventsConfig:
           topicFilter: kv@
           concurrency: 4

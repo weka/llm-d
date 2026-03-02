@@ -1,0 +1,6 @@
+# DRAM cache size for TP4 models (300 GB).
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: LMCACHE_MAX_LOCAL_CPU_SIZE
+    value: "300"

@@ -1,0 +1,20 @@
+# Mount the same chat_template.jinja ConfigMap into the vLLM model server
+# and pass --chat-template to force vLLM to use it.
+# This ensures vLLM and the EPP's UDS tokenizer sidecar use the EXACT same
+# chat template, preventing block key mismatches in KV-aware routing.
+
+# 1. Add ConfigMap volume with chat_template.jinja
+- op: add
+  path: /spec/template/spec/volumes/-
+  value:
+    name: chat-template
+    configMap:
+      name: gpt-oss-chat-template
+
+# 2. Mount the ConfigMap into the vLLM container
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts/-
+  value:
+    name: chat-template
+    mountPath: /chat-template
+    readOnly: true

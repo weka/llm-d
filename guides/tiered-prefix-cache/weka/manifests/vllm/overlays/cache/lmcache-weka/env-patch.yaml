@@ -24,7 +24,7 @@
   path: /spec/template/spec/containers/0/env/-
   value:
     name: LMCACHE_EXTRA_CONFIG
-    value: '{"gds_io_threads": 16}'
+    value: '{"gds_io_threads": 32}'
 - op: add
   path: /spec/template/spec/containers/0/env/-
   value:

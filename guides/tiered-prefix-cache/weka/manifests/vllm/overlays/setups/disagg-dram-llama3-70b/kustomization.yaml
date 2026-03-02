@@ -58,6 +58,16 @@ patches:
       kind: Deployment
       name: prefill
 
+  # DRAM cache size for TP4 (300 GB)
+  - path: ../../model/llama3-70b/dram-size-patch.yaml
+    target:
+      kind: Deployment
+      name: decode
+  - path: ../../model/llama3-70b/dram-size-patch.yaml
+    target:
+      kind: Deployment
+      name: prefill
+
   # Increase memory for DRAM cache (decode and prefill only)
   - path: ../../cache/lmcache-dram/memory-patch.yaml
     target:

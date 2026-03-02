@@ -1,0 +1,48 @@
+# Pre-populate chat_template.jinja for the tokenizer sidecar via init container.
+# The sidecar downloads 5 tokenizer files from HF but misses chat_template.jinja
+# (shipped as a separate file in the openai/gpt-oss-120b repo).
+# The init container copies it from a ConfigMap into a shared emptyDir volume
+# at the exact path the sidecar's HF download will use, so from_pretrained()
+# finds the template alongside the tokenizer files.
+
+# 1. Add emptyDir for the model directory (sidecar writes downloaded files here)
+- op: add
+  path: /spec/template/spec/volumes/-
+  value:
+    name: tokenizer-models
+    emptyDir: {}
+
+# 2. Add ConfigMap volume with chat_template.jinja
+- op: add
+  path: /spec/template/spec/volumes/-
+  value:
+    name: chat-template
+    configMap:
+      name: gpt-oss-chat-template
+
+# 3. Init container: copy chat_template.jinja into the model directory
+- op: add
+  path: /spec/template/spec/initContainers
+  value:
+    - name: copy-chat-template
+      image: docker.io/library/busybox:1.36
+      command: ["sh", "-c"]
+      args:
+        - |
+          mkdir -p /models/openai/gpt-oss-120b &&
+          cp /chat-template/chat_template.jinja /models/openai/gpt-oss-120b/chat_template.jinja &&
+          chmod -R 777 /models &&
+          echo "Copied chat_template.jinja to /models/openai/gpt-oss-120b/"
+      volumeMounts:
+        - name: tokenizer-models
+          mountPath: /models
+        - name: chat-template
+          mountPath: /chat-template
+          readOnly: true
+
+# 4. Mount the shared emptyDir into sidecar at /app/models
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts/-
+  value:
+    name: tokenizer-models
+    mountPath: /app/models

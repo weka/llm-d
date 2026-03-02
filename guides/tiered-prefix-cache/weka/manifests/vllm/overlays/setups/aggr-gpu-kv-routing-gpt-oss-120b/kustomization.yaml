@@ -2,11 +2,14 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: weka
 
-# Aggregated mode, GPU-only KV cache (no LMCache), KV-aware routing.
+# Aggregated mode, GPU-only KV cache (no LMCache), KV-aware routing with disaggregated tokenization.
 # Model: openai/gpt-oss-120b (MoE, TP8).
+# Uses llm-d-uds-tokenizer sidecar for EPP tokenization via Unix domain socket.
 
 resources:
   - ../../serving/aggregated
+  - ../../model/gpt-oss-120b/chat-template-configmap.yaml
+  - ../../epp/envoyfilter-extproc-insert.yaml
 
 helmCharts:
   - name: inferencepool
@@ -14,7 +17,7 @@ helmCharts:
     version: v1.3.0
     namespace: weka
     releaseName: weka-vllm
-    valuesFile: ../../model/gpt-oss-120b/epp-kv-aware.values.yaml
+    valuesFile: ../../epp/kv-aware-disagg.values.yaml
 
 patches:
   # Override args for gpt-oss-120b
@@ -35,11 +38,26 @@ patches:
       kind: Deployment
       name: llm-d-model-server
 
+  # Mount chat_template.jinja ConfigMap into vLLM (same template as EPP sidecar)
+  - path: ../../model/gpt-oss-120b/vllm-chat-template-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
   # KV-aware routing (POD_IP, LMCACHE_ENABLE_KV_EVENTS, --kv-events-config, ZMQ port)
   - path: ../../cache/kv-aware/deployment-patch.yaml
     target:
       kind: Deployment
       name: llm-d-model-server
+
+  # EPP: add model-specific scoring config to ConfigMap (disaggregated tokenization via UDS)
+  - path: ../../model/gpt-oss-120b/epp-configmap-patch-disagg.yaml
+
+  # Mount chat_template.jinja into tokenizer sidecar (not included in HF tokenizer download)
+  - path: ../../model/gpt-oss-120b/epp-sidecar-chat-template-patch.yaml
+    target:
+      kind: Deployment
+      name: weka-vllm-epp
 
   # EPP: use IfNotPresent for image pinned by tag
   - target:

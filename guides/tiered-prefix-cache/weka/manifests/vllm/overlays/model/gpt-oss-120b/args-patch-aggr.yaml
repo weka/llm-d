@@ -18,6 +18,10 @@
     - "--disable-uvicorn-access-log"
     - "--max-model-len"
     - "128000"
+    - "--prefix-caching-hash-algo"
+    - "sha256_cbor"
+    - "--chat-template"
+    - "/chat-template/chat_template.jinja"
     - "--enable-auto-tool-choice"
     - "--tool-call-parser"
     - openai

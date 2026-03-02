@@ -1,0 +1,39 @@
+# INSERT the ext_proc filter into the gateway's HTTP filter chain.
+# The shared EnvoyFilter (fix-epp-extproc) uses MERGE which is a no-op
+# when no ext_proc filter exists. This resource inserts the filter
+# before the router so EPP actually receives requests.
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: epp-extproc-insert
+  namespace: weka
+spec:
+  workloadSelector:
+    labels:
+      app.kubernetes.io/gateway: llm-d-inference-gateway
+  configPatches:
+    - applyTo: HTTP_FILTER
+      match:
+        context: GATEWAY
+        listener:
+          portNumber: 80
+          filterChain:
+            filter:
+              name: envoy.filters.network.http_connection_manager
+              subFilter:
+                name: envoy.filters.http.router
+      patch:
+        operation: INSERT_BEFORE
+        value:
+          name: envoy.filters.http.ext_proc
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor
+            failure_mode_allow: false
+            grpc_service:
+              envoy_grpc:
+                cluster_name: outbound|9002||weka-vllm-epp.weka.svc.cluster.local
+              timeout: 10s
+            processing_mode:
+              request_header_mode: SEND
+              response_header_mode: SEND
+              request_body_mode: BUFFERED

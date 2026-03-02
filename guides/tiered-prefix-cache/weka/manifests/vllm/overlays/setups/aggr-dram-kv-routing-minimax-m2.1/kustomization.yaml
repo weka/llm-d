@@ -77,8 +77,8 @@ patches:
       kind: Deployment
       name: llm-d-model-server
 
-  # EPP: add model-specific scoring config to ConfigMap
-  - path: ../../model/minimax-m2.1/epp-configmap-patch.yaml
+  # EPP: add model-specific scoring config to ConfigMap (DRAM variant with larger capacity)
+  - path: ../../model/minimax-m2.1/epp-configmap-patch-dram.yaml
 
   # EPP: use IfNotPresent for image pinned by tag
   - target:

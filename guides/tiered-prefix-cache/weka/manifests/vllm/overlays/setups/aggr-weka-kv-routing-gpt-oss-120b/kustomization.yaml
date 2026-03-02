@@ -2,11 +2,13 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: weka
 
-# Aggregated mode with Weka GDS + DRAM tiered LMCache + KV-aware routing.
+# Aggregated mode with Weka GDS LMCache + KV-aware routing (no DRAM tier).
 # Model: openai/gpt-oss-120b (MoE, TP8).
 
 resources:
   - ../../serving/aggregated
+  - ../../model/gpt-oss-120b/chat-template-configmap.yaml
+  - ../../epp/envoyfilter-extproc-insert.yaml
 
 helmCharts:
   - name: inferencepool
@@ -14,7 +16,7 @@ helmCharts:
     version: v1.3.0
     namespace: weka
     releaseName: weka-vllm
-    valuesFile: ../../epp/kv-aware-dram.values.yaml
+    valuesFile: ../../epp/kv-aware-disagg.values.yaml
 
 patches:
   # Override args for gpt-oss-120b
@@ -35,8 +37,20 @@ patches:
       kind: Deployment
       name: llm-d-model-server
 
+  # Mount chat_template.jinja ConfigMap into vLLM (same template as EPP tokenizer)
+  - path: ../../model/gpt-oss-120b/vllm-chat-template-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
   # Add LMCache Weka GDS env vars
   - path: ../../cache/lmcache-weka/env-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Explicitly disable CPU/DRAM cache (pure Weka GDS)
+  - path: ../../cache/no-cpu-cache/env-patch.yaml
     target:
       kind: Deployment
       name: llm-d-model-server
@@ -53,32 +67,20 @@ patches:
       kind: Deployment
       name: llm-d-model-server
 
-  # Add DRAM tier on top of Weka
-  - path: ../../cache/dram-tier/env-patch.yaml
-    target:
-      kind: Deployment
-      name: llm-d-model-server
-
-  # Increase memory for DRAM cache
-  - path: ../../cache/lmcache-dram/memory-patch.yaml
-    target:
-      kind: Deployment
-      name: llm-d-model-server
-
-  # Override DRAM size for TP8 (150 GB vs 300 GB default)
-  - path: ../../model/gpt-oss-120b/dram-size-patch.yaml
-    target:
-      kind: Deployment
-      name: llm-d-model-server
-
   # KV-aware routing (POD_IP, LMCACHE_ENABLE_KV_EVENTS, --kv-events-config, ZMQ port)
   - path: ../../cache/kv-aware/deployment-patch.yaml
     target:
       kind: Deployment
       name: llm-d-model-server
 
-  # EPP: add model-specific scoring config to ConfigMap
-  - path: ../../model/gpt-oss-120b/epp-configmap-patch.yaml
+  # EPP: add model-specific scoring config to ConfigMap (disaggregated tokenization via UDS)
+  - path: ../../model/gpt-oss-120b/epp-configmap-patch-disagg.yaml
+
+  # Mount chat_template.jinja into tokenizer sidecar (not included in HF tokenizer download)
+  - path: ../../model/gpt-oss-120b/epp-sidecar-chat-template-patch.yaml
+    target:
+      kind: Deployment
+      name: weka-vllm-epp
 
   # EPP: use IfNotPresent for image pinned by tag
   - target:

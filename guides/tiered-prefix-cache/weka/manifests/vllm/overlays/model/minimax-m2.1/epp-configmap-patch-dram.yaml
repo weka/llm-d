@@ -1,0 +1,47 @@
+# Strategic merge patch: adds precise-prefix-cache-scorer config to EPP ConfigMap.
+# hashSeed must match PYTHONHASHSEED on vLLM pods (0 in this deployment).
+# lruCapacityPerServer sized for GPU (~2,300 blocks) + DRAM (~60,000 blocks).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: weka-vllm-epp
+  namespace: weka
+data:
+  precise-prefix-cache-config.yaml: |
+    apiVersion: inference.networking.x-k8s.io/v1alpha1
+    kind: EndpointPickerConfig
+    plugins:
+    - type: single-profile-handler
+    - type: precise-prefix-cache-scorer
+      parameters:
+        tokenProcessorConfig:
+          blockSize: 256
+          hashSeed: '0'
+        indexerConfig:
+          tokenizersPoolConfig:
+            modelName: MiniMaxAI/MiniMax-M2.1
+            hf:
+              tokenizersCacheDir: /tmp/tokenizers
+        kvEventsConfig:
+          topicFilter: kv@
+          concurrency: 4
+          discoverPods: true
+          podDiscoveryConfig:
+            socketPort: 5557
+    - type: kv-cache-utilization-scorer
+    - type: queue-scorer
+      parameters:
+        hashBlockSize: 5
+        maxPrefixBlocksToMatch: 512
+        lruCapacityPerServer: 62500
+    - type: max-score-picker
+    schedulingProfiles:
+    - name: default
+      plugins:
+      - pluginRef: precise-prefix-cache-scorer
+        weight: 3.0
+      - pluginRef: kv-cache-utilization-scorer
+        weight: 2.0
+      - pluginRef: queue-scorer
+        weight: 2.0
+      - pluginRef: max-score-picker

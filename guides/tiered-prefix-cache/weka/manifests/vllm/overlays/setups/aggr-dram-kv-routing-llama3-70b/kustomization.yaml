@@ -40,6 +40,12 @@ patches:
       kind: Deployment
       name: llm-d-model-server
 
+  # DRAM cache size for TP4 (300 GB)
+  - path: ../../model/llama3-70b/dram-size-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
   # Increase memory for DRAM cache
   - path: ../../cache/lmcache-dram/memory-patch.yaml
     target:
@@ -52,8 +58,8 @@ patches:
       kind: Deployment
       name: llm-d-model-server
 
-  # EPP: add model-specific scoring config to ConfigMap
-  - path: ../../model/llama3-70b/epp-configmap-patch.yaml
+  # EPP: add model-specific scoring config to ConfigMap (DRAM variant with larger capacity)
+  - path: ../../model/llama3-70b/epp-configmap-patch-dram.yaml
 
   # EPP: use IfNotPresent for image pinned by tag
   - target:
