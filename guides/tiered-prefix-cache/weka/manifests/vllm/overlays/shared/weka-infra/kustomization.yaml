@@ -12,7 +12,7 @@ resources:
   - ../envoyfilter-extproc.yaml
 
 patches:
-  # Patch weka-storage volume to use hostPath
+  # Patch weka-storage volume to use PVC
   - target:
       kind: Deployment
     patch: |-
@@ -20,9 +20,8 @@ patches:
         path: /spec/template/spec/volumes/1
         value:
           name: weka-storage
-          hostPath:
-            path: /mnt/weka
-            type: Directory
+          persistentVolumeClaim:
+            claimName: weka-amg
 
   # Use Recreate strategy (delete old pods before creating new ones)
   # GPU pods can't coexist on same node during rolling updates
