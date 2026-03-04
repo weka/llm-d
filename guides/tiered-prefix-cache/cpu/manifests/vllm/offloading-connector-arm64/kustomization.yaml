@@ -67,6 +67,7 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/args/0
         value: |-
+          export LD_LIBRARY_PATH=$(echo "$LD_LIBRARY_PATH" | tr ':' '\n' | grep -v '/usr/local/cuda/compat' | tr '\n' ':' | sed 's/:$//') && \
           exec vllm serve Qwen/Qwen2.5-7B-Instruct \
             --tensor-parallel-size 1 \
             --enforce-eager \
@@ -78,6 +79,7 @@ patches:
             --port 8000
 
   # 4. HF_HOME → /data so model weights land on the emptyDir volume
+  #    FLASHINFER_WORKSPACE_BASE → /tmp so JIT kernels land somewhere writable (image runs as vllm user)
   - target:
       kind: Deployment
       name: llm-d-model-server
@@ -87,6 +89,11 @@ patches:
         value:
           name: HF_HOME
           value: /data
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: FLASHINFER_WORKSPACE_BASE
+          value: /tmp
 
   # 5. Shorter grace period
   - target:
