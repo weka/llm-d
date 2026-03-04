@@ -28,10 +28,10 @@ resources:
 
 images:
   # The standard overlay resolves INFERENCE_SERVER_IMAGE → ghcr.io/llm-d/llm-d-cuda-dev (x86).
-  # Override with the multi-arch vllm image.
+  # Override with the custom built image.
   - name: ghcr.io/llm-d/llm-d-cuda-dev
-    newName: vllm/vllm-openai
-    newTag: latest
+    newName: quay.io/weka.io/llm-d
+    newTag: 3sparks-deployment-1
 
 patches:
   # 1. One replica per node (3 nodes, 1 GPU each)
