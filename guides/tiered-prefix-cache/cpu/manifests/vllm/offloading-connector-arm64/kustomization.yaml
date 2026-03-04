@@ -1,0 +1,113 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# ARM64 self-contained overlay for OffloadingConnector CPU KV cache offloading.
+#
+# Single apply — includes Gateway, HTTPRoute (direct, no InferencePool), Service,
+# and the vLLM Deployment.
+#
+# Tested on: NVIDIA DGX Spark (GB10, compute 12.1, 128 GB NVLink-C2C), 3-node k3s/Istio.
+#
+# Prerequisites (cluster-level, not expressible in kustomize):
+#   1. Istio installed with Gateway API CRDs
+#   2. kubectl create namespace <ns>
+#   3. kubectl create secret generic llm-d-hf-token --from-literal=HF_TOKEN=<token> -n <ns>
+#
+# Usage:
+#   kubectl apply -k guides/tiered-prefix-cache/cpu/manifests/vllm/offloading-connector-arm64 -n <ns>
+#
+# Notes on ARM64/GB10-specific flags:
+#   --enforce-eager        : Triton PTX codegen fails on compute 12.1 with PyTorch ≤12.0 support
+#   --gpu-memory-utilization 0.65 : leaves headroom for OffloadingConnector GPU staging buffers
+#   cpu_bytes_to_use 20 GB : 100 GB of CUDA-pinned CPU memory exhausts GPU virtual address space
+
+resources:
+  - ../base
+  - ../../../../../recipes/gateway/istio
+  - service.yaml
+
+images:
+  # The standard overlay resolves INFERENCE_SERVER_IMAGE → ghcr.io/llm-d/llm-d-cuda-dev (x86).
+  # Override with the multi-arch vllm image.
+  - name: ghcr.io/llm-d/llm-d-cuda-dev
+    newName: vllm/vllm-openai
+    newTag: latest
+
+patches:
+  # 1. One replica per node (3 nodes, 1 GPU each)
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3
+
+  # 2. GPU resources
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/resources
+        value:
+          limits:
+            nvidia.com/gpu: 1
+          requests:
+            nvidia.com/gpu: 1
+            memory: 30Gi
+
+  # 3. vLLM command with OffloadingConnector + ARM64/GB10 flags
+  #    Change the model name here or via a further overlay.
+  #    Note: GB10 (128GB) can run up to 70B FP8 models at TP=1
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/args/0
+        value: |-
+          exec vllm serve Qwen/Qwen2.5-7B-Instruct \
+            --tensor-parallel-size 1 \
+            --enforce-eager \
+            --gpu-memory-utilization 0.65 \
+            --max-model-len 16384 \
+            --max-num-seq 512 \
+            --enable-chunked-prefill \
+            --kv-transfer-config '{"kv_connector":"OffloadingConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":21474836480}}' \
+            --port 8000
+
+  # 4. HF_HOME → /data so model weights land on the emptyDir volume
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: HF_HOME
+          value: /data
+
+  # 5. Shorter grace period
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/terminationGracePeriodSeconds
+        value: 60
+      - op: replace
+        path: /spec/template/spec/containers/0/lifecycle/preStop/sleep/seconds
+        value: 10
+
+  # 6. Redirect the gateway recipe's HTTPRoute from InferencePool → vLLM service directly.
+  #    InferencePool is not built for ARM64; we route straight to the model server pods.
+  - target:
+      kind: HTTPRoute
+      name: llm-d-route
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/backendRefs/0
+        value:
+          name: llm-d-model-server
+          port: 8000
