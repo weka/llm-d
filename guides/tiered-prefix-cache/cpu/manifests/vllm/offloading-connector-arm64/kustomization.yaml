@@ -34,14 +34,14 @@ images:
     newTag: 3sparks-deployment-1
 
 patches:
-  # 1. One replica per node (3 nodes, 1 GPU each)
+  # 1. Single replica
   - target:
       kind: Deployment
       name: llm-d-model-server
     patch: |-
       - op: replace
         path: /spec/replicas
-        value: 3
+        value: 1
 
   # 2. GPU resources
   - target:
