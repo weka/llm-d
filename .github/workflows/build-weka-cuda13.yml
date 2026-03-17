@@ -6,11 +6,10 @@ name: Build Weka CUDA 13 Image
 #   - LMCache:   weka fork, wheel downloaded from github.com/weka/LMCache releases
 #   - Base image: nvcr.io/nvidia/cuda:13.0.0-devel-ubuntu24.04
 #
-# Versioning convention (mirrors weka/LMCache build_weka_gds_rdma.yml):
-#   After each rebase onto an upstream llm-d release, create a base tag:
-#     git tag weka-v0.5.0 && git push origin weka-v0.5.0
-#   The workflow then computes: 0.5.0+weka.<commits-since-tag>
-#   Release tag: v0.5.0-weka.<N>  ('+' → '-' because '+' is invalid in git refs)
+# Versioning: automatically derived from the most recent llm-d release tag (v*)
+#   reachable from HEAD + commit count since that tag.
+#   e.g. on a branch 97 commits past v0.5.0: 0.5.0+weka.97 → release tag v0.5.0-weka.97
+#   No manual tagging required (unlike the lmcache fork which needs weka-v* tags).
 #
 # Triggers:
 #   - push to feat/weka-gds-rdma  → build + push image + create GitHub Release
@@ -71,29 +70,18 @@ jobs:
           fetch-depth: 0
 
       - name: Fetch tags for version detection
-        # Fetches all tags from origin so that git describe can find weka-v* base tags.
-        # Tagging convention — after each rebase onto upstream vX.Y.Z, run:
-        #   git tag weka-v0.5.0 && git push origin weka-v0.5.0
-        # The workflow then produces version: 0.5.0+weka.<commits-since-tag>
         run: git fetch origin --tags
 
       - name: Compute weka version
         id: version
         run: |
-          # Find the most recent weka-v* tag reachable from HEAD.
-          WEKA_BASE_TAG=$(git describe --tags --match "weka-v*" --abbrev=0 2>/dev/null || echo "")
-
-          if [ -n "$WEKA_BASE_TAG" ]; then
-            # Strip "weka-v" prefix to get the upstream version number (e.g. "0.5.0")
-            UPSTREAM_VERSION="${WEKA_BASE_TAG#weka-v}"
-            # Count commits added on top of this tag
-            WEKA_COMMITS=$(git rev-list "${WEKA_BASE_TAG}..HEAD" --count)
-          else
-            # Fallback: no weka-v* tag found — use the latest upstream v* tag and total count
-            echo "::warning::No weka-v* tag found. Create one after each upstream rebase (e.g. git tag weka-v0.5.0)."
-            UPSTREAM_VERSION=$(git describe --tags --match "v[0-9]*" --abbrev=0 2>/dev/null | sed 's/^v//' || echo "0.5.0")
-            WEKA_COMMITS=$(git rev-list HEAD --count)
-          fi
+          # Use the most recent llm-d release tag (v*) reachable from HEAD as the base.
+          # Unlike the lmcache fork (which needs a separate weka-v* tag to identify which
+          # upstream version it rebased onto), llm-d's own v* tags are the correct base —
+          # the weka work is a branch of llm-d itself, not a fork of something else.
+          BASE_TAG=$(git describe --tags --match "v[0-9]*" --abbrev=0 2>/dev/null || echo "v0.5.0")
+          UPSTREAM_VERSION="${BASE_TAG#v}"
+          WEKA_COMMITS=$(git rev-list "${BASE_TAG}..HEAD" --count)
 
           WEKA_VERSION="${UPSTREAM_VERSION}+weka.${WEKA_COMMITS}"
           # Release tag uses '-' instead of '+' since '+' is not valid in git ref names
