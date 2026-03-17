@@ -5,9 +5,7 @@ description: |
   PR comments instead of failing CI on flaky external URLs.
 
 on:
-  pull_request:
-    paths:
-      - "**/*.md"
+  workflow_dispatch:
 
 permissions: read-all
 

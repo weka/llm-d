@@ -29,9 +29,7 @@
 
 name: "Link Checker"
 "on":
-  pull_request:
-    paths:
-    - "**/*.md"
+  workflow_dispatch:
 
 permissions: {}
 
