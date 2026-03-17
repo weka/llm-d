@@ -5,8 +5,7 @@ description: |
   and posts fix suggestions as PR review comments with code suggestions.
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 permissions: read-all
 
