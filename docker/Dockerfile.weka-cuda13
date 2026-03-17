@@ -1,0 +1,183 @@
+# Weka-specific llm-d image: ARM64 + CUDA 13.0 + vllm 0.15.1 + lmcache weka fork
+#
+# Key differences from Dockerfile.cuda:
+#   - CUDA 13.0 base (vs 12.9 with UBI9)
+#   - Ubuntu 24.04
+#   - vllm 0.15.1 installed as a static wheel (no source build)
+#   - torch 2.9.1+cu130 from PyTorch's cu130 index (CUDA 13.0, sm 7.5+)
+#   - lmcache from weka fork (v0.3.14+weka.60), wheel from GitHub releases
+#   - cupy-cuda13x replaces cupy-cuda12x (CUDA 13 compatible)
+#   - Simplified: no NVSHMEM/NIXL/EFA/DeepEP/DeepGEMM source builds
+#
+# Build (local prototype, native ARM64):
+#   docker build -f docker/Dockerfile.weka-cuda13 \
+#     -t ghcr.io/llm-d/llm-d-weka-cuda:dev \
+#     .
+#
+# With a local lmcache wheel (override GitHub download):
+#   docker build -f docker/Dockerfile.weka-cuda13 \
+#     --build-arg LMCACHE_WEKA_WHEEL=lmcache-0.3.14+weka.60-cp312-cp312-manylinux_2_28_aarch64.whl \
+#     --build-arg LMCACHE_WHEEL_SRC=local \
+#     -t ghcr.io/llm-d/llm-d-weka-cuda:dev \
+#     .
+
+ARG CUDA_VERSION=13.0.0
+ARG UBUNTU_VERSION=24.04
+
+FROM nvcr.io/nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION}
+
+ARG CUDA_VERSION
+ARG UBUNTU_VERSION
+ARG PYTHON_VERSION=3.12
+ARG VLLM_VERSION=0.15.1
+
+# Weka LMCache wheel: downloaded from GitHub releases by default.
+# Release tag uses '-' instead of '+' ('+' is not valid in git ref names per PEP 440).
+# The wheel carries a dual manylinux platform tag: manylinux_2_26_aarch64.manylinux_2_28_aarch64
+# (produced by auditwheel repair in the weka/LMCache build_weka_gds_rdma.yml CI).
+ARG LMCACHE_WEKA_VERSION=0.3.14+weka.60
+ARG LMCACHE_WEKA_TAG=v0.3.14-weka.60
+ARG LMCACHE_WEKA_WHEEL=lmcache-0.3.14+weka.60-cp312-cp312-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl
+ARG LMCACHE_WHEEL_URL=https://github.com/weka/LMCache/releases/download/${LMCACHE_WEKA_TAG}/${LMCACHE_WEKA_WHEEL}
+
+# LMCACHE_WHEEL_SRC: 'remote' (default, download from GitHub) or 'local' (COPY from context)
+ARG LMCACHE_WHEEL_SRC=remote
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    UV_HTTP_TIMEOUT=500 \
+    UV_INDEX_STRATEGY=unsafe-best-match \
+    UV_LINK_MODE=copy \
+    VIRTUAL_ENV=/opt/vllm \
+    CUDA_HOME=/usr/local/cuda \
+    PYTHON_VERSION=${PYTHON_VERSION}
+
+# LD_LIBRARY_PATH set later once VIRTUAL_ENV and PYTHON_VERSION are ENV variables
+ENV LD_LIBRARY_PATH="${VIRTUAL_ENV}/lib/python${PYTHON_VERSION}/site-packages/torch/lib:\
+/usr/local/nvidia/lib:/usr/local/nvidia/lib64:\
+${CUDA_HOME}/lib64:\
+/usr/local/lib:/usr/local/lib64:\
+/usr/lib/aarch64-linux-gnu:\
+${LD_LIBRARY_PATH:-}"
+
+# CUDA 13.0 dropped sm_70 (V100); TORCH_CUDA_ARCH_LIST starts at 7.5
+ENV TORCH_CUDA_ARCH_LIST="7.5;8.0;8.6;8.9;9.0;9.0a;10.0;12.0+PTX"
+
+# Install system dependencies
+RUN apt-get update -y && \
+    apt-get install -y --no-install-recommends \
+        software-properties-common \
+        git \
+        curl \
+        python3 \
+        python3-dev \
+        python3-venv \
+        python3-pip \
+        libsndfile1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv and create virtualenv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    mv ~/.local/bin/uv /usr/local/bin/ && \
+    mv ~/.local/bin/uvx /usr/local/bin/ && \
+    uv venv /opt/vllm --python ${PYTHON_VERSION}
+
+ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
+
+# Install torch 2.9.1+cu130 first so vllm's torch==2.9.1 requirement is met
+# from the cu130 index (CUDA 13 native build, ARM64).
+# Notes:
+#   - torch==2.9.1+cu130 is available for aarch64 from the PyTorch cu130 index
+#   - torchaudio/torchvision: no aarch64/cu130 wheels; install from PyPI (CPU-only
+#     binary but compatible — vllm only uses torch's CUDA path, not these)
+#   - --no-deps on torchaudio/torchvision avoids re-pulling CPU torch from PyPI
+RUN --mount=type=cache,target=/root/.cache/uv \
+    . /opt/vllm/bin/activate && \
+    uv pip install \
+        "torch==2.9.1+cu130" \
+        --extra-index-url https://download.pytorch.org/whl/cu130 && \
+    uv pip install --no-deps \
+        "torchaudio==2.9.1" \
+        "torchvision==0.24.1"
+
+# Install vllm 0.15.1 (static wheel from PyPI).
+# The aarch64 abi3 wheel (manylinux_2_31) is pre-compiled; CUDA 13 backward
+# compat covers the bundled CUDA 12 kernels via /usr/local/cuda/compat/.
+# --no-build-isolation ensures the torch already in the venv is used.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    . /opt/vllm/bin/activate && \
+    uv pip install \
+        "vllm==${VLLM_VERSION}" \
+        --extra-index-url https://download.pytorch.org/whl/cu130
+
+# Install lmcache weka fork wheel.
+# Two modes controlled by LMCACHE_WHEEL_SRC:
+#   remote - fetch from GitHub releases (default, reproducible)
+#   local  - copy from build context (pass wheel via docker build --build-arg)
+#
+# After the wheel + deps are installed, replace cupy-cuda12x with cupy-cuda13x
+# so CUDA 13 GPU accelerated array operations work correctly.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=.,target=/ctx,rw=false \
+    . /opt/vllm/bin/activate && \
+    if [ "${LMCACHE_WHEEL_SRC}" = "local" ]; then \
+        WHEEL_PATH="/ctx/${LMCACHE_WEKA_WHEEL}"; \
+        echo "Installing lmcache from local wheel: ${WHEEL_PATH}"; \
+        uv pip install "${WHEEL_PATH}"; \
+    else \
+        echo "Installing lmcache from: ${LMCACHE_WHEEL_URL}"; \
+        uv pip install "${LMCACHE_WHEEL_URL}"; \
+    fi && \
+    uv pip install --force-reinstall "cupy-cuda13x"
+
+# Copy GDS scripts for Weka (kernel module loader + startup probe)
+COPY docker/scripts/cuda/runtime/enable-nvidia-gds.sh /usr/local/bin/enable-nvidia-gds.sh
+COPY docker/scripts/cuda/runtime/gds-startup-probe.sh /usr/local/bin/gds-startup-probe.sh
+RUN chmod +x /usr/local/bin/enable-nvidia-gds.sh \
+              /usr/local/bin/gds-startup-probe.sh
+
+# Create vllm user (uid 2000, gid 0 for OpenShift anyuid SCC compatibility)
+RUN useradd --uid 2000 --gid 0 -m vllm && \
+    touch /home/vllm/.bashrc
+
+# Create workspace writable by both root and vllm user (OpenShift compatible)
+RUN mkdir -p /opt/vllm-source && \
+    chown -R 2000:0 /opt/vllm-source && \
+    chmod -R g+rwX /opt/vllm-source
+
+# Set up models and HF cache directories (writable by group 0 for OpenShift)
+ENV LLM_D_MODELS_DIR=/var/lib/llm-d/models \
+    HF_HOME=/var/lib/llm-d/.hf
+
+RUN mkdir -p "$LLM_D_MODELS_DIR" "$HF_HOME" && \
+    chown -R root:0 /var/lib/llm-d && \
+    chmod -R g+rwX /var/lib/llm-d && \
+    find /var/lib/llm-d -type d -exec chmod g+s {} \; && \
+    ln -snf /var/lib/llm-d/models /models
+
+# Replace system python symlinks to point at the virtualenv
+RUN rm -f /usr/bin/python3 /usr/bin/python3-config /usr/bin/pip && \
+    ln -s /opt/vllm/bin/python3 /usr/bin/python3 && \
+    ln -s /opt/vllm/bin/python3-config /usr/bin/python3-config && \
+    ln -s /opt/vllm/bin/pip /usr/bin/pip
+
+ENV PATH="${VIRTUAL_ENV}/bin:/usr/local/nvidia/bin:${PATH}" \
+    HOME=/home/vllm \
+    VLLM_USAGE_SOURCE=production-docker-image \
+    VLLM_WORKER_MULTIPROC_METHOD=fork \
+    OUTLINES_CACHE_DIR=/tmp/outlines \
+    NUMBA_CACHE_DIR=/tmp/numba \
+    TRITON_CACHE_DIR=/tmp/triton \
+    # ARM64 Ubuntu: libcuda.so lives in /usr/lib/aarch64-linux-gnu
+    TRITON_LIBCUDA_PATH=/usr/lib/aarch64-linux-gnu \
+    TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC=15 \
+    TORCH_NCCL_DUMP_ON_TIMEOUT=0 \
+    VLLM_SKIP_P2P_CHECK=1 \
+    VLLM_CACHE_ROOT=/tmp/vllm \
+    UCX_MEM_MMAP_HOOK_MODE=none
+
+USER 2000
+WORKDIR /home/vllm
+
+ENTRYPOINT ["python", "-m", "vllm.entrypoints.openai.api_server"]
