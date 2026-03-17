@@ -185,26 +185,30 @@ jobs:
           PRIMARY_TAG: ${{ steps.image_tags.outputs.primary_tag }}
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
+          cat > /tmp/release-notes.md << EOF
+          ## llm-d ${WEKA_VERSION} — ARM64 / CUDA 13.0
+
+          **Image:** \`${PRIMARY_TAG}\`
+          **Digest:** \`${DIGEST}\`
+
+          | Component | Version |
+          |---|---|
+          | vLLM | \`${{ env.VLLM_VERSION }}\` |
+          | LMCache | \`${{ env.LMCACHE_WEKA_TAG }}\` |
+          | CUDA | 13.0 |
+          | Platform | linux/arm64 |
+
+          ### Pull
+
+          \`\`\`
+          docker pull ${PRIMARY_TAG}
+          # or by digest (immutable):
+          docker pull ${REGISTRY}/${IMAGE_REPO}@${DIGEST}
+          \`\`\`
+          EOF
+
           gh release create "${RELEASE_TAG}" \
             --repo "${{ github.repository }}" \
             --target "${{ github.sha }}" \
             --title "Weka llm-d ${WEKA_VERSION}" \
-            --notes "## llm-d ${WEKA_VERSION} — ARM64 / CUDA 13.0
-
-**Image:** \`${PRIMARY_TAG}\`
-**Digest:** \`${DIGEST}\`
-
-| Component | Version |
-|---|---|
-| vLLM | \`${{ env.VLLM_VERSION }}\` |
-| LMCache | \`${{ env.LMCACHE_WEKA_TAG }}\` |
-| CUDA | 13.0 |
-| Platform | linux/arm64 |
-
-### Pull
-
-\`\`\`
-docker pull ${PRIMARY_TAG}
-# or by digest (immutable):
-docker pull ${REGISTRY}/${IMAGE_REPO}@${DIGEST}
-\`\`\`"
+            --notes-file /tmp/release-notes.md
