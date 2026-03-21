@@ -18,7 +18,7 @@ spec:
       serviceAccountName: weka-vllm
       initContainers:
       - name: create-cufile
-        image: ghcr.io/llm-d/llm-d-cuda-dev-ubuntu:sha-8c00fce
+        image: quay.io/weka.io/llm-d:old-sha-8c00fce
         imagePullPolicy: Always
         command:
         - /bin/bash
@@ -40,7 +40,7 @@ spec:
         - --tensor-parallel-size
         - '4'
         - --block-size
-        - '128'
+        - '256'
         - --gpu-memory-utilization
         - '0.80'
         - --disable-log-requests

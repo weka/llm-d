@@ -1,0 +1,204 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: weka
+
+# K3s variant: Aggregated mode with Weka GDS LMCache, basic routing via EPP.
+# No nvidia.com/gpu resources.
+
+resources:
+  - ../../serving/aggregated
+
+helmCharts:
+  - name: inferencepool
+    repo: oci://registry.k8s.io/gateway-api-inference-extension/charts
+    version: v1.3.0
+    namespace: weka
+    releaseName: weka-vllm
+    valuesFile: ../../epp/aggregated.values.yaml
+
+patches:
+  # Model-specific env vars (MODEL_NAME)
+  - path: ../../model/llama3-70b/env-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Add LMCache Weka GDS env vars
+  - path: ../../cache/lmcache-weka/env-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Explicitly disable CPU/DRAM cache (pure Weka GDS)
+  - path: ../../cache/no-cpu-cache/env-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Add lmcache-prometheus volume + volumeMount
+  - path: ../../cache/lmcache-weka/volume-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Add --kv-transfer-config with LMCacheConnectorV1
+  - path: ../../cache/lmcache-weka/args-patch-aggr.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # EPP: use IfNotPresent for image pinned by tag
+  - target:
+      kind: Deployment
+      name: weka-vllm-epp
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+
+  # Strip nvidia.com/gpu resources
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/containers/0/resources/limits/nvidia.com~1gpu
+      - op: remove
+        path: /spec/template/spec/containers/0/resources/requests/nvidia.com~1gpu
+
+  # Replace initContainers with a lightweight one that symlinks only NVIDIA driver
+  # libs from the host into a clean emptyDir (avoids glibc conflicts from mounting
+  # the entire host /usr/lib/x86_64-linux-gnu).  Needed because the k3s containerd
+  # is not configured with the NVIDIA container runtime, so GPU driver libraries
+  # are not auto-injected into containers.
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/initContainers
+        value:
+          - name: symlink-nvidia-libs
+            image: busybox:1.37
+            imagePullPolicy: IfNotPresent
+            command: ["/bin/sh", "-c"]
+            args:
+              - |
+                for f in /host-libs/libcuda*.so* /host-libs/libnvidia*.so*; do
+                  [ -e "$f" ] && ln -sf "$f" /nvidia-libs/$(basename "$f")
+                done
+                echo "Symlinked NVIDIA libs:" && ls /nvidia-libs/
+            volumeMounts:
+              - name: host-nvidia-libs
+                mountPath: /host-libs
+                readOnly: true
+              - name: nvidia-libs
+                mountPath: /nvidia-libs
+
+  # Add host-nvidia-libs volume (host NVIDIA driver directory)
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value:
+          name: host-nvidia-libs
+          hostPath:
+            path: /usr/lib/x86_64-linux-gnu
+            type: Directory
+
+  # Add nvidia-libs emptyDir (clean dir with only NVIDIA symlinks)
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value:
+          name: nvidia-libs
+          emptyDir: {}
+
+  # Mount nvidia-libs and host-nvidia-libs into vllm container
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value:
+          name: nvidia-libs
+          mountPath: /usr/local/nvidia/lib64
+          readOnly: true
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value:
+          name: host-nvidia-libs
+          mountPath: /host-libs
+          readOnly: true
+
+  # Set LD_LIBRARY_PATH so vllm can find host NVIDIA driver libs and nvshmem
+  # Set HOME to writable location (image user is uid=2000 vllm, /home/vllm is read-only)
+  # Set TRITON_PTXAS_PATH: Triton bundles ptxas 12.8 which doesn't support sm_103a (B300);
+  #   the container's CUDA 12.9 ptxas at /usr/local/cuda/bin/ptxas does.
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: LD_LIBRARY_PATH
+          value: "/usr/local/nvidia/lib64:/opt/nvshmem-v3.5.19-1/lib"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: HOME
+          value: "/mnt/weka/home"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: TRITON_PTXAS_PATH
+          value: "/usr/local/cuda/bin/ptxas"
+
+  # Replace cufile-output emptyDir with hostPath directly to /etc/cufile.json
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/volumes/2
+        value:
+          name: cufile-output
+          hostPath:
+            path: /etc/cufile.json
+            type: File
+
+  # Replace cufile-output volumeMount to drop subPath (hostPath is already the file)
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/volumeMounts/2
+        value:
+          name: cufile-output
+          mountPath: /etc/cufile.json
+          readOnly: true
+
+  # Remove imagePullSecrets (no ghcr-secret needed, images from quay.io)
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/imagePullSecrets
+
+  # Set replicas to 8
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 8

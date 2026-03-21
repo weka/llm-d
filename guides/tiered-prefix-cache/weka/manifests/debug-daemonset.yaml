@@ -18,7 +18,7 @@ spec:
         - operator: Exists
       containers:
         - name: debug
-          image: ghcr.io/llm-d/llm-d-cuda-dev-ubuntu:sha-8c00fce
+          image: quay.io/weka.io/llm-d:old-sha-8c00fce
           command: ["sleep", "infinity"]
           securityContext:
             privileged: true

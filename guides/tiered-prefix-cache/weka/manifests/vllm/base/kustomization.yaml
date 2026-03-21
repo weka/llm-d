@@ -16,7 +16,7 @@ patches:
     patch: |-
       - op: replace
         path: /spec/template/spec/containers/0/image
-        value: "quay.io/weka.io/llm-d:ver3"
+        value: "quay.io/weka.io/llm-d:v0.5.0-latest-bef6991-dc515f3f-P33292"
 
   # Update command and args for WEKA deployment
   - target:
