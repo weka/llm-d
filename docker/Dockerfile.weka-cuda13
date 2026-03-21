@@ -110,20 +110,29 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         "torchaudio==2.9.1" \
         "torchvision==0.24.1"
 
+# Install build tools and CUDA 12 cudart compat (vllm._C links against libcudart.so.12)
+RUN apt-get update -y && \
+    apt-get install -y --no-install-recommends cmake ninja-build cuda-cudart-12-9 && \
+    rm -rf /var/lib/apt/lists/* && ldconfig
+
 # Build vllm from source — the PyPI wheel lacks sm_103a CUTLASS kernels for B300.
 # Source build uses TORCH_CUDA_ARCH_LIST (set above) which includes 10.3a.
-# Install build deps first, then build with --no-build-isolation to use the cu130 torch.
+# Cache mounts: uv/pip for downloads, /tmp/vllm-build for ccache/cmake artifacts.
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=cache,target=/root/.cache/pip \
-    apt-get update -y && \
-    apt-get install -y --no-install-recommends cmake ninja-build cuda-cudart-12-9 && \
-    rm -rf /var/lib/apt/lists/* && ldconfig && \
+    --mount=type=cache,target=/tmp/vllm-build \
     . /opt/vllm/bin/activate && \
     uv pip install setuptools setuptools-scm wheel packaging ninja cmake && \
+    CCACHE_DIR=/tmp/vllm-build/ccache \
     MAX_JOBS=$(nproc) \
     uv pip install --no-build-isolation --no-binary vllm \
         "vllm==${VLLM_VERSION}" \
-        --extra-index-url https://download.pytorch.org/whl/cu130 && \
+        --extra-index-url https://download.pytorch.org/whl/cu130
+
+# Replace cu13 NVIDIA runtime libs with cu12 equivalents for host driver compat.
+# Separate layer so vLLM source build above stays cached when changing lib versions.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    . /opt/vllm/bin/activate && \
     uv pip install --force-reinstall \
         "nvidia-cublas-cu12" \
         "nvidia-cuda-cupti-cu12" \
