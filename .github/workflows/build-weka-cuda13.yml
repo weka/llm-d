@@ -1,9 +1,9 @@
 name: Build Weka CUDA 13 Image
 
 # Builds llm-d for the Weka GDS/RDMA stack:
-#   - Platform:  ARM64 (aarch64), CUDA 13.0
-#   - vLLM:      0.15.1 (static PyPI wheel)
-#   - LMCache:   weka fork, wheel downloaded from github.com/weka/LMCache releases
+#   - Platform:  multi-arch (linux/amd64 + linux/arm64), CUDA 13.0
+#   - vLLM:      0.18.0 (static PyPI wheel, includes B300/sm_103a CUTLASS fix)
+#   - LMCache:   weka fork, wheel from releases (arm64) or built from source (x86_64)
 #   - Base image: nvcr.io/nvidia/cuda:13.0.0-devel-ubuntu24.04
 #
 # Versioning: automatically derived from the most recent llm-d release tag (v*)
@@ -28,19 +28,19 @@ on:
       lmcache_weka_tag:
         description: "weka/LMCache release tag (e.g. v0.3.14-weka.60)"
         required: false
-        default: "v0.3.14-weka.60"
+        default: "v0.3.14-weka.62"
         type: string
       vllm_version:
         description: "vLLM version to install (PyPI)"
         required: false
-        default: "0.15.1"
+        default: "0.18.0"
         type: string
 
 env:
   REGISTRY: ghcr.io
   IMAGE_REPO: ${{ github.repository_owner }}/llm-d-weka-cuda
-  VLLM_VERSION: ${{ inputs.vllm_version || '0.15.1' }}
-  LMCACHE_WEKA_TAG: ${{ inputs.lmcache_weka_tag || 'v0.3.14-weka.60' }}
+  VLLM_VERSION: ${{ inputs.vllm_version || '0.18.0' }}
+  LMCACHE_WEKA_TAG: ${{ inputs.lmcache_weka_tag || 'v0.3.14-weka.62' }}
 
 defaults:
   run:
@@ -56,7 +56,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build llm-d weka image (ARM64 / CUDA 13.0)
+    name: Build llm-d weka image (multi-arch / CUDA 13.0)
     runs-on: self-hosted
 
     # For pull_request events: only run if the source branch is a feat/weka* branch.
@@ -131,14 +131,14 @@ jobs:
         with:
           context: .
           file: docker/Dockerfile.weka-cuda13
-          platforms: linux/arm64
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.image_tags.outputs.tags }}
           build-args: |
             VLLM_VERSION=${{ env.VLLM_VERSION }}
             LMCACHE_WEKA_TAG=${{ env.LMCACHE_WEKA_TAG }}
           labels: |
-            org.opencontainers.image.title=llm-d weka (ARM64/CUDA 13)
+            org.opencontainers.image.title=llm-d weka (multi-arch/CUDA 13)
             org.opencontainers.image.description=llm-d ${{ steps.version.outputs.weka_version }} — vLLM ${{ env.VLLM_VERSION }} + LMCache ${{ env.LMCACHE_WEKA_TAG }} (Weka GDS/RDMA, CUDA 13.0)
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -174,7 +174,7 @@ jobs:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           cat > /tmp/release-notes.md << EOF
-          ## llm-d ${WEKA_VERSION} — ARM64 / CUDA 13.0
+          ## llm-d ${WEKA_VERSION} — multi-arch / CUDA 13.0
 
           **Image:** \`${PRIMARY_TAG}\`
           **Digest:** \`${DIGEST}\`
@@ -184,7 +184,7 @@ jobs:
           | vLLM | \`${{ env.VLLM_VERSION }}\` |
           | LMCache | \`${{ env.LMCACHE_WEKA_TAG }}\` |
           | CUDA | 13.0 |
-          | Platform | linux/arm64 |
+          | Platform | linux/amd64, linux/arm64 |
 
           ### Pull
 
