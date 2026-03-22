@@ -95,11 +95,14 @@ patches:
           port: 8000
           kind: Service
 
-  # Remove the shared MERGE EnvoyFilter (fix-epp-extproc) inherited from
-  # aggregated. It overrides the ext_proc cluster_name back to the
+  # Neutralize the shared MERGE EnvoyFilter (fix-epp-extproc) inherited from
+  # aggregated. It would override the ext_proc cluster_name back to the
   # Istio-managed cluster, undoing our static-cluster workaround.
+  # Empty configPatches makes it a no-op.
   - target:
       kind: EnvoyFilter
       name: fix-epp-extproc
     patch: |-
-      $patch: delete
+      - op: replace
+        path: /spec/configPatches
+        value: []
