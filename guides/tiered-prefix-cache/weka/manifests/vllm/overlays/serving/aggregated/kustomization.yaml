@@ -9,6 +9,11 @@ namespace: weka
 
 resources:
   - ../../../base
+  # Shared resources (moved from weka-infra component — components can't reference outside their dir)
+  - ../../shared/serviceAccount.yaml
+  - ../../shared/podmonitor.yaml
+  - ../../../../gateway/overlays/istio
+  - ../../shared/envoyfilter-extproc.yaml
 
 components:
   - ../../shared/weka-infra
