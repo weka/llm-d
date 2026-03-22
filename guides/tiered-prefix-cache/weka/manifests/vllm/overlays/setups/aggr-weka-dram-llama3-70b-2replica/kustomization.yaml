@@ -1,0 +1,108 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: weka
+
+# Aggregated mode with Weka GDS + DRAM tiered LMCache, basic routing via EPP.
+# 2 replicas — one per NUMA node, each pinned to 4 GPUs.
+# Model: RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic (TP4).
+
+resources:
+  - ../../serving/aggregated
+  # NUMA1 deployment — self-contained because base-chain patches target by name
+  # (llm-d-model-server only). See deployment-numa1.yaml header for details.
+  - deployment-numa1.yaml
+  # Headless Service: Istio can't resolve InferencePool (InvalidKind), so
+  # HTTPRoute targets this Service; EPP ext_proc handles model-aware routing.
+  - ../../epp/service-vllm-headless.yaml
+  # INSERT EnvoyFilter: setup-specific override with Istio workarounds
+  # (static cluster, TLS, metadata exchange bypass). Replaces the shared
+  # ../../epp/envoyfilter-extproc-insert.yaml which is deleted below.
+  - envoyfilter-extproc-insert.yaml
+
+helmCharts:
+  - name: inferencepool
+    repo: oci://registry.k8s.io/gateway-api-inference-extension/charts
+    version: v1.3.0
+    namespace: weka
+    releaseName: weka-vllm
+    valuesFile: ../../epp/aggregated.values.yaml
+
+patches:
+  # ============================================================
+  # Shared patches: apply to BOTH vLLM deployments via label selector.
+  # Both have llm-d.ai/inference-serving=true; EPP deployment does not.
+  # ============================================================
+
+  # ---- Model ----
+  - path: ../../model/llama3-70b/env-patch.yaml
+    target:
+      kind: Deployment
+      labelSelector: "llm-d.ai/inference-serving=true"
+
+  # ---- Cache: Weka GDS base ----
+  - path: ../../cache/lmcache-weka/env-patch.yaml
+    target:
+      kind: Deployment
+      labelSelector: "llm-d.ai/inference-serving=true"
+  - path: ../../cache/lmcache-weka/volume-patch.yaml
+    target:
+      kind: Deployment
+      labelSelector: "llm-d.ai/inference-serving=true"
+  - path: ../../cache/lmcache-weka/args-patch-aggr.yaml
+    target:
+      kind: Deployment
+      labelSelector: "llm-d.ai/inference-serving=true"
+
+  # ---- Cache: DRAM tier on top of Weka GDS ----
+  - path: ../../cache/dram-tier/env-patch.yaml
+    target:
+      kind: Deployment
+      labelSelector: "llm-d.ai/inference-serving=true"
+
+  # ============================================================
+  # Per-deployment patches: NUMA-specific pinning
+  # ============================================================
+
+  # ---- NUMA0: replicas=1, GPUs 0-3, NUMA0 NICs, hostNetwork=false ----
+  - path: numa0-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # ---- EPP: use IfNotPresent for image pinned by tag ----
+  - target:
+      kind: Deployment
+      name: weka-vllm-epp
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+
+  # ============================================================
+  # Gateway routing fixes for Istio
+  # ============================================================
+
+  # Istio can't resolve InferencePool (InvalidKind) — route via headless Service.
+  # EPP ext_proc still handles model-aware routing in the filter chain.
+  - target:
+      kind: HTTPRoute
+      name: llm-d-route
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/backendRefs/0
+        value:
+          name: llm-d-model-server
+          port: 8000
+          kind: Service
+
+  # Neutralize the shared MERGE EnvoyFilter (fix-epp-extproc) inherited from
+  # aggregated. It would override the ext_proc cluster_name back to the
+  # Istio-managed cluster, undoing our static-cluster workaround.
+  # Empty configPatches makes it a no-op.
+  - target:
+      kind: EnvoyFilter
+      name: fix-epp-extproc
+    patch: |-
+      - op: replace
+        path: /spec/configPatches
+        value: []

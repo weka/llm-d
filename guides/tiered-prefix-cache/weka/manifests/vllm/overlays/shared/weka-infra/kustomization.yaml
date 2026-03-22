@@ -1,15 +1,12 @@
 apiVersion: kustomize.config.k8s.io/v1alpha1
 kind: Component
 
-# Weka infrastructure: hostPath storage, RDMA, hostNetwork, privileged security context.
+# Weka infrastructure: RDMA, hostNetwork, privileged security context.
 # Used by disaggregated/ and aggregated/ serving mode layers.
-# Also owns shared resources common to both modes.
-
-resources:
-  - ../serviceAccount.yaml
-  - ../podmonitor.yaml
-  - ../../../../gateway/overlays/istio
-  - ../envoyfilter-extproc.yaml
+#
+# NOTE: Shared resources (ServiceAccount, PodMonitor, Gateway, EnvoyFilter)
+# are declared in each serving mode kustomization, not here — kustomize
+# components cannot reference resources outside their own directory.
 
 patches:
   # Patch weka-storage volume to use PVC

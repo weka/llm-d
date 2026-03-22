@@ -129,22 +129,23 @@ patches:
             command: ["/bin/bash", "-c"]
             args:
               - |
-                # Temporary fix: install RDMA libs if missing from image (remove once new image is built)
-                # Load GDS kernel modules
+                # Load GDS kernel modules (critical — fail if these don't load)
                 lsmod | grep -q nvidia_fs || modprobe nvidia_fs || { echo "ERROR: Failed to load nvidia_fs" >&2; exit 1; }
                 lsmod | grep -q nvidia_peermem || modprobe nvidia_peermem || { echo "ERROR: Failed to load nvidia_peermem" >&2; exit 1; }
                 echo "GDS modules loaded successfully"
                 # Initialize NVIDIA driver context so RDMA devices are visible to gdscheck
                 nvidia-smi > /dev/null 2>&1 || true
-                # Verify GDS setup
+                # Verify GDS setup (non-fatal: init container lacks /mnt/weka,
+                # so gdscheck reports WekaFS Unsupported even when GDS works fine
+                # in the main container which has the WEKA mount)
                 echo "=== GDS Configuration Check ==="
                 GDS_OUT=$(/usr/local/cuda/gds/tools/gdscheck -p 2>&1)
                 echo "$GDS_OUT"
                 if echo "$GDS_OUT" | grep -q "WekaFS.*: Supported"; then
                   echo "GDS: WekaFS Supported, RDMA Up"
                 else
-                  echo "ERROR: WekaFS GDS not supported" >&2
-                  exit 1
+                  echo "WARNING: WekaFS GDS check unsupported in init container (WEKA not mounted here)." >&2
+                  echo "GDS modules are loaded; WEKA GDS will be available in the main container." >&2
                 fi
             volumeMounts:
               - name: ib-uverbs
