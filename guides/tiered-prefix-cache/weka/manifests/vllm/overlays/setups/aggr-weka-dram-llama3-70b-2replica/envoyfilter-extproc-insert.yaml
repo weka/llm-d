@@ -1,0 +1,101 @@
+# INSERT the ext_proc filter into the gateway's HTTP filter chain,
+# and add a static cluster for EPP that bypasses Istio's metadata
+# exchange TCP filter (which corrupts connections to non-sidecar pods).
+#
+# This is a setup-specific override of ../../epp/envoyfilter-extproc-insert.yaml
+# with workarounds for older Istio versions that lack native InferencePool
+# support and whose metadata exchange filter breaks non-sidecar gRPC.
+#
+# Why a static cluster?
+#   Istio-managed clusters (outbound|9002||...) include an
+#   istio.metadata_exchange filter that prepends a TCP protocol
+#   handshake. The EPP pod has no Istio sidecar, so this prefix
+#   corrupts the TLS handshake and the gRPC stream never opens.
+#   A static STRICT_DNS cluster connects directly without that filter.
+#
+# Why TLS?
+#   The EPP ext_proc gRPC server on port 9002 expects TLS.
+#   Without it: "first record does not look like a TLS handshake".
+#
+# Why failure_mode_allow: true?
+#   EPP v0.5.0 ext_proc handler does not respond to ProcessingRequest
+#   messages (TLS connects, HTTP/2 opens, but Process RPC hangs).
+#   With failure_mode_allow: true, requests fall through to Envoy's
+#   normal routing after message_timeout. Set to false once EPP is
+#   confirmed working on your cluster.
+#
+# Why message_timeout: 5s?
+#   Envoy's default is 200ms, far too short for an inference-aware
+#   endpoint picker. 5s is a reasonable upper bound.
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: epp-extproc-insert
+  namespace: weka
+spec:
+  workloadSelector:
+    labels:
+      app.kubernetes.io/gateway: llm-d-inference-gateway
+  configPatches:
+    # --- Static cluster for EPP (bypasses Istio metadata exchange) ---
+    - applyTo: CLUSTER
+      match:
+        context: GATEWAY
+      patch:
+        operation: ADD
+        value:
+          name: epp-direct
+          type: STRICT_DNS
+          connect_timeout: 10s
+          lb_policy: ROUND_ROBIN
+          typed_extension_protocol_options:
+            envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+              "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+              explicit_http_config:
+                http2_protocol_options: {}
+          transport_socket:
+            name: envoy.transport_sockets.tls
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+              common_tls_context:
+                validation_context:
+                  trust_chain_verification: ACCEPT_UNTRUSTED
+                alpn_protocols:
+                  - h2
+          load_assignment:
+            cluster_name: epp-direct
+            endpoints:
+              - lb_endpoints:
+                  - endpoint:
+                      address:
+                        socket_address:
+                          address: weka-vllm-epp.weka.svc.cluster.local
+                          port_value: 9002
+
+    # --- ext_proc HTTP filter ---
+    - applyTo: HTTP_FILTER
+      match:
+        context: GATEWAY
+        listener:
+          portNumber: 80
+          filterChain:
+            filter:
+              name: envoy.filters.network.http_connection_manager
+              subFilter:
+                name: envoy.filters.http.router
+      patch:
+        operation: INSERT_BEFORE
+        value:
+          name: envoy.filters.http.ext_proc
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor
+            failure_mode_allow: true
+            message_timeout: 5s
+            grpc_service:
+              envoy_grpc:
+                cluster_name: epp-direct
+              timeout: 10s
+            processing_mode:
+              request_header_mode: SEND
+              response_header_mode: SEND
+              request_body_mode: BUFFERED

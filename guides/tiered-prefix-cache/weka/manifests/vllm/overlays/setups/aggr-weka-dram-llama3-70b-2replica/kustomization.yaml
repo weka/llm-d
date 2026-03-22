@@ -14,9 +14,10 @@ resources:
   # Headless Service: Istio can't resolve InferencePool (InvalidKind), so
   # HTTPRoute targets this Service; EPP ext_proc handles model-aware routing.
   - ../../epp/service-vllm-headless.yaml
-  # INSERT EnvoyFilter: injects the ext_proc filter into the gateway listener.
-  # The MERGE filter (from weka-infra) configures it; this one creates it.
-  - ../../epp/envoyfilter-extproc-insert.yaml
+  # INSERT EnvoyFilter: setup-specific override with Istio workarounds
+  # (static cluster, TLS, metadata exchange bypass). Replaces the shared
+  # ../../epp/envoyfilter-extproc-insert.yaml which is deleted below.
+  - envoyfilter-extproc-insert.yaml
 
 helmCharts:
   - name: inferencepool
@@ -93,3 +94,12 @@ patches:
           name: llm-d-model-server
           port: 8000
           kind: Service
+
+  # Remove the shared MERGE EnvoyFilter (fix-epp-extproc) inherited from
+  # aggregated. It overrides the ext_proc cluster_name back to the
+  # Istio-managed cluster, undoing our static-cluster workaround.
+  - target:
+      kind: EnvoyFilter
+      name: fix-epp-extproc
+    patch: |-
+      $patch: delete
