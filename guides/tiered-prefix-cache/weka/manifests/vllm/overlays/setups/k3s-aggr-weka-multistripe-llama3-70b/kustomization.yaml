@@ -1,0 +1,91 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: weka
+
+# K3s variant: Aggregated mode with Weka GDS LMCache + striped cuFile registration.
+# Uses 8 independently registered stripes of the single KV cache allocation for
+# zero-copy parallel RDMA IO — no bounce buffers, no GPU memcpy.
+# Replaces the buffer-pool approach (k3s-aggr-weka-pool-llama3-70b).
+# Pinned to node .5 for comparison against pool setup on node .2.
+
+resources:
+  - ../../serving/aggregated
+
+components:
+  - ../../shared/k3s-workarounds
+
+helmCharts:
+  - name: inferencepool
+    repo: oci://registry.k8s.io/gateway-api-inference-extension/charts
+    version: v1.3.0
+    namespace: weka
+    releaseName: weka-vllm
+    valuesFile: ../../epp/aggregated.values.yaml
+
+images:
+  - name: quay.io/weka.io/llm-d
+    newTag: v0.5.0-weka-multistripe
+
+patches:
+  # Model-specific env vars (MODEL_NAME)
+  - path: ../../model/llama3-70b/env-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Add LMCache Weka GDS env vars
+  - path: ../../cache/lmcache-weka/env-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Explicitly disable CPU/DRAM cache (pure Weka GDS)
+  - path: ../../cache/no-cpu-cache/env-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Add lmcache-prometheus volume + volumeMount
+  - path: ../../cache/lmcache-weka/volume-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Add --kv-transfer-config with LMCacheConnectorV1
+  - path: ../../cache/lmcache-weka/args-patch-aggr.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Enable 8-stripe zero-copy cuFile registration
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: LMCACHE_EXTRA_CONFIG
+          value: '{"gds_io_threads": 32, "cufile_num_stripes": 8}'
+
+  # EPP: use IfNotPresent for image pinned by tag
+  - target:
+      kind: Deployment
+      name: weka-vllm-epp
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+
+  # Single replica pinned to node .5
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: add
+        path: /spec/template/spec/nodeSelector
+        value:
+          kubernetes.io/hostname: "10.71.0.10"
