@@ -145,14 +145,16 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # Install lmcache weka fork.
 # Modes controlled by LMCACHE_WHEEL_SRC:
-#   auto   - wheel on arm64 (from GitHub releases), source on x86_64 (default)
-#   remote - force download wheel from GitHub releases
-#   local  - copy from build context (pass wheel via docker build --build-arg)
-#   source - force build from git on any arch
+#   auto    - wheel on arm64 (from GitHub releases), source on x86_64 (default)
+#   remote  - force download wheel from GitHub releases
+#   local   - copy from build context (pass wheel via docker build --build-arg)
+#   source  - force build from git on any arch
+#   localdir - build from local directory (bind-mounted via --build-context lmcache=<path>)
 #
 # After install, replace cupy-cuda12x with cupy-cuda13x.
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=.,target=/ctx,rw=false \
+    --mount=type=bind,from=lmcache-src,target=/lmcache-src \
     . /opt/vllm/bin/activate && \
     ARCH=$(uname -m) && \
     MODE="${LMCACHE_WHEEL_SRC}" && \
@@ -163,6 +165,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         WHEEL_PATH="/ctx/${LMCACHE_WEKA_WHEEL}"; \
         echo "Installing lmcache from local wheel: ${WHEEL_PATH}"; \
         uv pip install "${WHEEL_PATH}"; \
+    elif [ "${MODE}" = "localdir" ]; then \
+        echo "Building lmcache from local source (--build-context lmcache-src)"; \
+        cp -r /lmcache-src /tmp/lmcache-build && \
+        SETUPTOOLS_SCM_PRETEND_VERSION="${LMCACHE_WEKA_VERSION}" \
+        uv pip install --no-build-isolation /tmp/lmcache-build; \
     elif [ "${MODE}" = "source" ]; then \
         echo "Building lmcache from source (${ARCH}): ${LMCACHE_GIT_URL}@${LMCACHE_GIT_REF}"; \
         SETUPTOOLS_SCM_PRETEND_VERSION="${LMCACHE_WEKA_VERSION}" \
