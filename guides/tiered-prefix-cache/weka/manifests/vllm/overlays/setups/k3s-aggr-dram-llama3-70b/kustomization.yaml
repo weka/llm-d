@@ -2,8 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: weka
 
-# K3s variant: Aggregated mode with Weka GDS LMCache, basic routing via EPP.
-# No nvidia.com/gpu resources.
+# K3s variant: Aggregated mode with LMCache DRAM backend.
 
 resources:
   - ../../serving/aggregated
@@ -30,26 +29,32 @@ patches:
       kind: Deployment
       name: llm-d-model-server
 
-  # Add LMCache Weka GDS env vars
-  - path: ../../cache/lmcache-weka/env-patch.yaml
-    target:
-      kind: Deployment
-      name: llm-d-model-server
-
-  # Explicitly disable CPU/DRAM cache (pure Weka GDS)
-  - path: ../../cache/no-cpu-cache/env-patch.yaml
+  # Add LMCache DRAM env vars
+  - path: ../../cache/lmcache-dram/env-patch.yaml
     target:
       kind: Deployment
       name: llm-d-model-server
 
   # Add lmcache-prometheus volume + volumeMount
-  - path: ../../cache/lmcache-weka/volume-patch.yaml
+  - path: ../../cache/lmcache-dram/volume-patch.yaml
     target:
       kind: Deployment
       name: llm-d-model-server
 
   # Add --kv-transfer-config with LMCacheConnectorV1
-  - path: ../../cache/lmcache-weka/args-patch-aggr.yaml
+  - path: ../../cache/lmcache-dram/args-patch-aggr.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Increase memory for DRAM cache
+  - path: ../../cache/lmcache-dram/memory-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # DRAM cache size for TP4 (300 GB)
+  - path: ../../model/llama3-70b/dram-size-patch.yaml
     target:
       kind: Deployment
       name: llm-d-model-server
@@ -63,7 +68,7 @@ patches:
         path: /spec/template/spec/containers/0/imagePullPolicy
         value: IfNotPresent
 
-  # Single replica pinned to node .02 for now (other nodes not ready)
+  # Single replica pinned to node .02 for now
   - target:
       kind: Deployment
       name: llm-d-model-server

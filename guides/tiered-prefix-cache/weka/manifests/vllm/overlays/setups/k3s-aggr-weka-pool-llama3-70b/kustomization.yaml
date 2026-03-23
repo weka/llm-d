@@ -2,8 +2,9 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: weka
 
-# K3s variant: Aggregated mode with Weka GDS LMCache, basic routing via EPP.
-# No nvidia.com/gpu resources.
+# K3s variant: Aggregated mode with Weka GDS LMCache + buffer pool.
+# Uses 32 independently registered 32MiB cuFile buffers for parallel GDS IO.
+# Compare against k3s-aggr-weka-llama3-70b (single shared buffer) for perf delta.
 
 resources:
   - ../../serving/aggregated
@@ -21,7 +22,7 @@ helmCharts:
 
 images:
   - name: quay.io/weka.io/llm-d
-    newTag: v0.5.0-weka-ftruncate-fix
+    newTag: v0.5.0-weka-buffer-pool
 
 patches:
   # Model-specific env vars (MODEL_NAME)
@@ -54,6 +55,17 @@ patches:
       kind: Deployment
       name: llm-d-model-server
 
+  # Override LMCACHE_EXTRA_CONFIG to enable buffer pool (32 × 32 MiB)
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: LMCACHE_EXTRA_CONFIG
+          value: '{"gds_io_threads": 32, "cufile_buffer_pool_size": 32, "cufile_buffer_pool_buf_size_mb": 32}'
+
   # EPP: use IfNotPresent for image pinned by tag
   - target:
       kind: Deployment
@@ -63,7 +75,7 @@ patches:
         path: /spec/template/spec/containers/0/imagePullPolicy
         value: IfNotPresent
 
-  # Single replica pinned to node .02 for now (other nodes not ready)
+  # Single replica pinned to node .02 for now
   - target:
       kind: Deployment
       name: llm-d-model-server

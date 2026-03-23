@@ -1,0 +1,206 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# K3s-specific workarounds for running vLLM with NVIDIA GPUs.
+# K3s containerd is not configured with the NVIDIA container runtime, so GPU
+# driver libraries, device nodes, and cuFile config are not auto-injected.
+# This component strips nvidia.com/gpu resource requests, symlinks host NVIDIA
+# driver libs into a clean emptyDir, mounts /dev for GPU + nvidia-fs devices,
+# removes deprecated vLLM args, drops imagePullSecrets, and runs as root.
+
+patches:
+  # Strip nvidia.com/gpu resources
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/containers/0/resources/limits/nvidia.com~1gpu
+      - op: remove
+        path: /spec/template/spec/containers/0/resources/requests/nvidia.com~1gpu
+
+  # Replace initContainers with a lightweight one that symlinks only NVIDIA driver
+  # libs from the host into a clean emptyDir (avoids glibc conflicts from mounting
+  # the entire host /usr/lib/x86_64-linux-gnu).  Needed because the k3s containerd
+  # is not configured with the NVIDIA container runtime, so GPU driver libraries
+  # are not auto-injected into containers.
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/initContainers
+        value:
+          - name: symlink-nvidia-libs
+            image: busybox:1.37
+            imagePullPolicy: IfNotPresent
+            command: ["/bin/sh", "-c"]
+            args:
+              - |
+                for f in /host-libs/libcuda*.so* /host-libs/libnvidia*.so* \
+                         /host-libs/libibverbs*.so* /host-libs/libmlx5*.so* \
+                         /host-libs/librdmacm*.so* /host-libs/libibumad*.so* \
+                         /host-libs/libnl-route-3*.so* /host-libs/libnl-3*.so* \
+                         /host-libs/libnuma*.so*; do
+                  [ -e "$f" ] && ln -sf "$f" /nvidia-libs/$(basename "$f")
+                done
+                # Also symlink the libibverbs provider directory (mlx5 plugin)
+                mkdir -p /nvidia-libs/libibverbs
+                for f in /host-libs/libibverbs/*; do
+                  [ -e "$f" ] && ln -sf "$f" /nvidia-libs/libibverbs/$(basename "$f")
+                done
+                echo "Symlinked libs:" && ls /nvidia-libs/
+            volumeMounts:
+              - name: host-nvidia-libs
+                mountPath: /host-libs
+                readOnly: true
+              - name: nvidia-libs
+                mountPath: /nvidia-libs
+
+  # Add host-nvidia-libs volume (host NVIDIA driver directory)
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value:
+          name: host-nvidia-libs
+          hostPath:
+            path: /usr/lib/x86_64-linux-gnu
+            type: Directory
+
+  # Add nvidia-libs emptyDir (clean dir with only NVIDIA symlinks)
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value:
+          name: nvidia-libs
+          emptyDir: {}
+
+  # Mount nvidia-libs and host-nvidia-libs into vllm container
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value:
+          name: nvidia-libs
+          mountPath: /usr/local/nvidia/lib64
+          readOnly: true
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value:
+          name: host-nvidia-libs
+          mountPath: /host-libs
+          readOnly: true
+
+  # Set LD_LIBRARY_PATH so vllm can find host NVIDIA driver libs and nvshmem
+  # Set HOME to writable location (image user is uid=2000 vllm, /home/vllm is read-only)
+  # Set TRITON_PTXAS_PATH: Triton bundles ptxas 12.8 which doesn't support sm_103a (B300);
+  #   the container's CUDA 12.9 ptxas at /usr/local/cuda/bin/ptxas does.
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: LD_LIBRARY_PATH
+          value: "/usr/local/nvidia/lib64:/usr/local/cuda/targets/x86_64-linux/lib:/opt/nvshmem-v3.5.19-1/lib"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: HOME
+          value: "/mnt/weka/home"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: TRITON_PTXAS_PATH
+          value: "/usr/local/cuda/bin/ptxas"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: CUFILE_ENV_PATH_JSON
+          value: "/etc/cufile.json"
+
+  # Replace cufile-output emptyDir with hostPath directly to /etc/cufile.json
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/volumes/2
+        value:
+          name: cufile-output
+          hostPath:
+            path: /etc/cufile.json
+            type: File
+
+  # Replace cufile-output volumeMount to drop subPath (hostPath is already the file)
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/volumeMounts/2
+        value:
+          name: cufile-output
+          mountPath: /etc/cufile.json
+          readOnly: true
+
+  # Remove imagePullSecrets (no ghcr-secret needed, images from quay.io)
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/imagePullSecrets
+
+  # Remove --disable-log-requests and --disable-uvicorn-access-log (removed in vLLM 0.18.0)
+  # Must remove higher index first to preserve lower indices.
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/containers/0/args/12
+      - op: remove
+        path: /spec/template/spec/containers/0/args/11
+
+  # Mount host /dev for nvidia-fs (GDS), GPU devices, and UVM.
+  # Required because k3s containerd doesn't inject /dev/nvidia* without NVIDIA runtime.
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value:
+          name: dev-nvidia
+          hostPath:
+            path: /dev
+            type: Directory
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value:
+          name: dev-nvidia
+          mountPath: /dev
+      - op: add
+        path: /spec/template/spec/initContainers/0/volumeMounts/-
+        value:
+          name: dev-nvidia
+          mountPath: /dev
+
+  # Run as root for GDS RDMA buffer registration
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/securityContext/runAsUser
+        value: 0

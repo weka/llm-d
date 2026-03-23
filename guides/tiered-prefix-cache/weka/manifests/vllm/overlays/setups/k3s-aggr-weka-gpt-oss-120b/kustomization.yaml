@@ -3,10 +3,12 @@ kind: Kustomization
 namespace: weka
 
 # K3s variant: Aggregated mode with Weka GDS LMCache, basic routing via EPP.
+# Model: openai/gpt-oss-120b (MoE, TP8).
 # No nvidia.com/gpu resources.
 
 resources:
   - ../../serving/aggregated
+  - ../../model/gpt-oss-120b/chat-template-configmap.yaml
 
 components:
   - ../../shared/k3s-workarounds
@@ -24,8 +26,26 @@ images:
     newTag: v0.5.0-weka-ftruncate-fix
 
 patches:
+  # Override args for gpt-oss-120b
+  - path: ../../model/gpt-oss-120b/args-patch-aggr.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Override GPU count for TP8
+  - path: ../../model/gpt-oss-120b/gpu-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
   # Model-specific env vars (MODEL_NAME)
-  - path: ../../model/llama3-70b/env-patch.yaml
+  - path: ../../model/gpt-oss-120b/env-patch.yaml
+    target:
+      kind: Deployment
+      name: llm-d-model-server
+
+  # Mount chat_template.jinja ConfigMap into vLLM (required by --chat-template in args)
+  - path: ../../model/gpt-oss-120b/vllm-chat-template-patch.yaml
     target:
       kind: Deployment
       name: llm-d-model-server
@@ -62,6 +82,35 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/imagePullPolicy
         value: IfNotPresent
+
+  # Remove --disable-log-requests and --disable-uvicorn-access-log (removed in vLLM 0.18.0)
+  # These are re-introduced by gpt-oss-120b/args-patch-aggr.yaml after k3s-workarounds strips them.
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/containers/0/args/12
+      - op: remove
+        path: /spec/template/spec/containers/0/args/11
+  # Re-strip nvidia.com/gpu after gpu-patch adds them back (no device plugin on k3s)
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/containers/0/resources/limits/nvidia.com~1gpu
+      - op: remove
+        path: /spec/template/spec/containers/0/resources/requests/nvidia.com~1gpu
+
+  # Increase startup probe timeout for OSS-120 (MoE model compilation takes 15+ min)
+  - target:
+      kind: Deployment
+      name: llm-d-model-server
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/startupProbe/failureThreshold
+        value: 360
 
   # Single replica pinned to node .02 for now (other nodes not ready)
   - target:
