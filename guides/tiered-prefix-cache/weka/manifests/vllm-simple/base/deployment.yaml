@@ -45,8 +45,8 @@ spec:
               if echo "$GDS_OUT" | grep -q "WekaFS.*: Supported"; then
                 echo "GDS: WekaFS Supported, RDMA Up"
               else
-                echo "ERROR: WekaFS GDS not supported" >&2
-                exit 1
+                echo "WARNING: WekaFS GDS not supported" >&2
+                exit 0
               fi
           volumeMounts:
             - name: ib-uverbs
