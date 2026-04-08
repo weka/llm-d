@@ -10,26 +10,59 @@ resources:
   - ../../overlays/model/llama3-70b-bf16
 
 patches:
-  # LMCache DRAM env vars (LMCACHE_LOCAL_CPU=true, LMCACHE_CHUNK_SIZE, etc.)
-  - path: ../../../vllm/overlays/cache/lmcache-dram/env-patch.yaml
-    target:
+  - target:
       kind: Deployment
       name: vllm
-
-  # Increase memory limit for CPU cache headroom (1524Gi)
-  - path: ../../../vllm/overlays/cache/lmcache-dram/memory-patch.yaml
-    target:
-      kind: Deployment
-      name: vllm
-
-  # Add lmcache-prometheus volume + volumeMount
-  - path: ../../../vllm/overlays/cache/lmcache-dram/volume-patch.yaml
-    target:
-      kind: Deployment
-      name: vllm
-
-  # Add --kv-transfer-config with LMCacheConnectorV1
-  - path: ../../../vllm/overlays/cache/lmcache-dram/args-patch-aggr.yaml
-    target:
-      kind: Deployment
-      name: vllm
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: LMCACHE_USE_EXPERIMENTAL
+          value: "true"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: LMCACHE_CHUNK_SIZE
+          value: "256"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: LMCACHE_LOCAL_CPU
+          value: "true"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: LMCACHE_PRE_CACHING_HASH_ALGORITHM
+          value: "sha256"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: LMCACHE_SAVE_DECODE_CACHE
+          value: "false"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: PROMETHEUS_MULTIPROC_DIR
+          value: /tmp/lmcache_prometheus
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 1524Gi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 1524Gi
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value:
+          name: lmcache-prometheus
+          emptyDir: {}
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value:
+          name: lmcache-prometheus
+          mountPath: /tmp/lmcache_prometheus
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: "--kv-transfer-config"
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: '{"kv_connector":"LMCacheConnectorV1","kv_role":"kv_both"}'
