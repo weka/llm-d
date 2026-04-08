@@ -8,7 +8,7 @@ kind: Kustomization
 namespace: weka
 
 resources:
-  - ../../base
+  - ../../../base
 
 patches:
   - path: patch.yaml
