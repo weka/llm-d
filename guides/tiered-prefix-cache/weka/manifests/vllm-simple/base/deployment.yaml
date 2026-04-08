@@ -30,7 +30,7 @@ spec:
             - name: cufile-output
               mountPath: /output
         - name: enable-nvidia-gds
-          image: ghcr.io/llm-d/llm-d-cuda-dev-ubuntu:sha-990d488
+          image: ghcr.io/llm-d/llm-d-cuda-dev-ubuntu:sha-8c00fce
           imagePullPolicy: IfNotPresent
           command: ["/bin/bash", "-c"]
           args:
