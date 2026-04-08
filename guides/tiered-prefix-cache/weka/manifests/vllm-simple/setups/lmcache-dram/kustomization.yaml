@@ -1,0 +1,35 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# vLLM + LMCache with DRAM/CPU backend (no Weka GDS).
+# Deploy: kubectl apply -k guides/tiered-prefix-cache/weka/manifests/vllm-simple/setups/lmcache-dram
+
+namespace: weka
+
+resources:
+  - ../../overlays/model/llama3-70b-bf16
+
+patches:
+  # LMCache DRAM env vars (LMCACHE_LOCAL_CPU=true, LMCACHE_CHUNK_SIZE, etc.)
+  - path: ../../vllm/overlays/cache/lmcache-dram/env-patch.yaml
+    target:
+      kind: Deployment
+      name: vllm
+
+  # Increase memory limit for CPU cache headroom (1524Gi)
+  - path: ../../vllm/overlays/cache/lmcache-dram/memory-patch.yaml
+    target:
+      kind: Deployment
+      name: vllm
+
+  # Add lmcache-prometheus volume + volumeMount
+  - path: ../../vllm/overlays/cache/lmcache-dram/volume-patch.yaml
+    target:
+      kind: Deployment
+      name: vllm
+
+  # Add --kv-transfer-config with LMCacheConnectorV1
+  - path: ../../vllm/overlays/cache/lmcache-dram/args-patch-aggr.yaml
+    target:
+      kind: Deployment
+      name: vllm

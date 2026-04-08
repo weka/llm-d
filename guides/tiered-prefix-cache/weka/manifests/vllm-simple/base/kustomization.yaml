@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Self-contained vLLM base for Weka deployments.
+# No gateway, inference pool, or other components — pure vLLM only.
+# Apply a model overlay (overlays/model/*) to configure the model, TP, and GPU count.
+# Then add a cache tier via setups/ or by patching in overlays/cache/*.
+
+resources:
+  - deployment.yaml

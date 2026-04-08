@@ -1,0 +1,151 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: vllm
+  template:
+    metadata:
+      labels:
+        app: vllm
+    spec:
+      serviceAccountName: weka-vllm
+      hostNetwork: true
+      imagePullSecrets:
+        - name: ghcr-secret
+      initContainers:
+        - name: create-cufile
+          image: ghcr.io/llm-d/llm-d-cuda-dev-ubuntu:sha-8c00fce
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/bash", "-c"]
+          args:
+            - curl -fsSL -o /tmp/amgctl https://github.com/4D0R/amg-utils/releases/download/v0.1.21-gds/amgctl-linux-amd64
+              && chmod +x /tmp/amgctl && /tmp/amgctl host config cufile /output/cufile.json
+          volumeMounts:
+            - name: cufile-output
+              mountPath: /output
+        - name: enable-nvidia-gds
+          image: ghcr.io/llm-d/llm-d-cuda-dev-ubuntu:sha-990d488
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              lsmod | grep -q nvidia_fs || modprobe nvidia_fs || { echo "ERROR: Failed to load nvidia_fs" >&2; exit 1; }
+              lsmod | grep -q nvidia_peermem || modprobe nvidia_peermem || { echo "ERROR: Failed to load nvidia_peermem" >&2; exit 1; }
+              echo "GDS modules loaded successfully"
+              nvidia-smi > /dev/null 2>&1 || true
+              echo "=== GDS Configuration Check ==="
+              GDS_OUT=$(/usr/local/cuda/gds/tools/gdscheck -p 2>&1)
+              echo "$GDS_OUT"
+              if echo "$GDS_OUT" | grep -q "WekaFS.*: Supported"; then
+                echo "GDS: WekaFS Supported, RDMA Up"
+              else
+                echo "ERROR: WekaFS GDS not supported" >&2
+                exit 1
+              fi
+          volumeMounts:
+            - name: ib-uverbs
+              mountPath: /dev/infiniband
+            - name: cufile-output
+              mountPath: /etc/cufile.json
+              subPath: cufile.json
+          securityContext:
+            privileged: true
+            runAsUser: 0
+      containers:
+        - name: vllm
+          image: quay.io/weka.io/llm-d:v0.5.0-weka-ftruncate-fix
+          command: ["vllm", "serve"]
+          # args are set by the model overlay (overlays/model/*/patch.yaml)
+          args: []
+          ports:
+            - containerPort: 8000
+              name: http
+              protocol: TCP
+          env:
+            - name: VLLM_LOGGING_LEVEL
+              value: "INFO"
+            - name: NCCL_DEBUG
+              value: "INFO"
+            - name: HF_HOME
+              value: "/mnt/weka/hf_cache"
+            - name: NVIDIA_GDRCOPY
+              value: "enabled"
+            - name: NVIDIA_GDS
+              value: "enabled"
+            - name: PYTHONHASHSEED
+              value: "0"
+            - name: UCX_NET_DEVICES
+              value: "mlx5_0:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_7:1,mlx5_8:1,mlx5_9:1"
+          resources:
+            # Overridden by model overlay
+            limits:
+              cpu: "16"
+              memory: 256Gi
+              nvidia.com/gpu: "8"
+            requests:
+              cpu: "16"
+              memory: 256Gi
+              nvidia.com/gpu: "8"
+          securityContext:
+            privileged: true
+            capabilities:
+              add:
+                - IPC_LOCK
+                - SYS_RESOURCE
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 120
+          readinessProbe:
+            httpGet:
+              path: /v1/models
+              port: 8000
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: shm
+              mountPath: /dev/shm
+            - name: weka-storage
+              mountPath: /mnt/weka
+            - name: cufile-output
+              mountPath: /etc/cufile.json
+              subPath: cufile.json
+              readOnly: true
+            - name: ib-rdma-cm
+              mountPath: /dev/infiniband/rdma_cm
+            - name: ib-uverbs
+              mountPath: /dev/infiniband
+      volumes:
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Gi
+        - name: weka-storage
+          persistentVolumeClaim:
+            claimName: weka-amg
+        - name: cufile-output
+          emptyDir: {}
+        - name: ib-rdma-cm
+          hostPath:
+            path: /dev/infiniband/rdma_cm
+        - name: ib-uverbs
+          hostPath:
+            path: /dev/infiniband
