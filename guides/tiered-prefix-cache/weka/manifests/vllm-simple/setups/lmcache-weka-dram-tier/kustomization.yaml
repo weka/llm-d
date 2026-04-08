@@ -7,36 +7,36 @@ kind: Kustomization
 namespace: weka
 
 resources:
-  - ../../overlays/model/llama3-70b-bf16
+  - ../../../overlays/model/llama3-70b-bf16
 
 patches:
   # LMCache Weka GDS env vars (LMCACHE_GDS_PATH, LMCACHE_CHUNK_SIZE, etc.)
-  - path: ../../vllm/overlays/cache/lmcache-weka/env-patch.yaml
+  - path: ../../../vllm/overlays/cache/lmcache-weka/env-patch.yaml
     target:
       kind: Deployment
       name: vllm
 
   # Enable CPU/DRAM tier on top of Weka GDS (overrides LMCACHE_LOCAL_CPU=false)
   # Apply AFTER lmcache-weka env patch
-  - path: ../../vllm/overlays/cache/dram-tier/env-patch.yaml
+  - path: ../../../vllm/overlays/cache/dram-tier/env-patch.yaml
     target:
       kind: Deployment
       name: vllm
 
   # Increase memory limit for CPU cache headroom (1524Gi)
-  - path: ../../vllm/overlays/cache/lmcache-dram/memory-patch.yaml
+  - path: ../../../vllm/overlays/cache/lmcache-dram/memory-patch.yaml
     target:
       kind: Deployment
       name: vllm
 
   # Add lmcache-prometheus volume + volumeMount
-  - path: ../../vllm/overlays/cache/lmcache-weka/volume-patch.yaml
+  - path: ../../../vllm/overlays/cache/lmcache-weka/volume-patch.yaml
     target:
       kind: Deployment
       name: vllm
 
   # Add --kv-transfer-config with LMCacheConnectorV1
-  - path: ../../vllm/overlays/cache/lmcache-weka/args-patch-aggr.yaml
+  - path: ../../../vllm/overlays/cache/lmcache-weka/args-patch-aggr.yaml
     target:
       kind: Deployment
       name: vllm
