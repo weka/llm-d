@@ -14,7 +14,6 @@
     - "128"
     - "--gpu-memory-utilization"
     - "0.80"
-    - "--disable-log-requests"
     - "--disable-uvicorn-access-log"
     - "--max-model-len"
     - "125000"
