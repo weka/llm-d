@@ -7,4 +7,5 @@ kind: Kustomization
 # Then add a cache tier via setups/ or by patching in overlays/cache/*.
 
 resources:
+  - serviceaccount.yaml
   - deployment.yaml
