@@ -7,7 +7,7 @@ kind: Kustomization
 namespace: weka
 
 resources:
-  - ../../../overlays/model/llama3-70b-bf16
+  - ../../overlays/model/llama3-70b-bf16
 
 patches:
   # LMCache DRAM env vars (LMCACHE_LOCAL_CPU=true, LMCACHE_CHUNK_SIZE, etc.)
