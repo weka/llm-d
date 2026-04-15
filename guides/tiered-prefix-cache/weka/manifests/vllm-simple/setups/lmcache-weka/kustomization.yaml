@@ -28,7 +28,7 @@ patches:
         path: /spec/template/spec/containers/0/env/-
         value:
           name: LMCACHE_GDS_PATH
-          value: /mnt/weka/cache
+          value: /mnt/weka/cache_w_gc
       - op: add
         path: /spec/template/spec/containers/0/env/-
         value:

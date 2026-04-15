@@ -59,7 +59,7 @@ spec:
             runAsUser: 0
       containers:
         - name: vllm
-          image: quay.io/weka.io/llm-d:v0.5.0-weka-ftruncate-fix
+          image: quay.io/weka.io/vllm:cuda13-v0.0.0-6f8e347-lmcbaa075d-wrd01c350d-wke78bfe0-gc_integ
           command: ["vllm", "serve"]
           # args are set by the model overlay (overlays/model/*/patch.yaml)
           args: []
